@@ -1,6 +1,6 @@
 # Development
 
-cardscan development guide
+Development guide
 
 ## Contents
 
@@ -12,55 +12,58 @@ cardscan development guide
 
 ## Code Organization
 
-This android library builds on top of the framework in the [CardScan base library](https://github.com/getbouncer/cardscan-base-android) to provide user interfaces for scanning payment cards. Anything specific to the user interface of the CardScan product lives in this library.
+This android library builds on top of the [scan-card-ui](https://github.com/getbouncer/scan-card-ui-android) and [scan-payment](https://github.com/getbouncer/scan-payment) libraries to provide user interfaces for scanning payment cards. Anything specific to the user interface of the CardScan product lives in this library.
 
-![cardscan dependencies](images/cardscan_dependencies.png)
+![dependencies](images/dependencies.png)
 
-CardScan consists of these modules and a demo app:
-* [cardscan-base](https://github.com/getbouncer/cardscan-base-android)
-* [cardscan-camera](https://github.com/getbouncer/cardscan-camera-android)
-* [cardscan-ui](https://github.com/getbouncer/cardscan-ui-android)
-* [cardscan](https://github.com/getbouncer/cardscan-android)
+This library consists of these modules and a demo app:
+* [scan-framework](#scan-framework)
+* [scan-camera](#scan-camera)
+* [scan-payment](#scan-payment)
+* [scan-ui-card](#scan-ui-card)
+* [cardscan-ui](#cardscan-ui)
 
-![cardverify_demo dependencies](images/cardverify_demo_dependencies.png)
+### scan-framework
 
-### cardscan base
+[scan-framework](https://github.com/getbouncer/scan-framework-android) contains the framework used to scan images. See the [architecture document](https://github.com/getbouncer/scan-framework-android/tree/master/docs/architecture.md) for details on how it processes images from the camera.
 
-[CardScan Base](https://github.com/getbouncer/cardscan-base-android) contains the framework and machine learning models used to scan cards. See the [architecture document](https://github.com/getbouncer/cardscan-base-android/blob/master/docs/architecture.md) for details on how CardScan processes images from the camera.
+### scan-camera
 
-### cardscan camera
+[scan-camera](https://github.com/getbouncer/scan-camera-android) contains the camera interfaces for setting up the camera on the device and receiving images from it. It also handles converting the images from the camera to a processable format.
 
-[CardScan Camera](https://github.com/getbouncer/cardscan-camera-android) contains the camera interfaces for setting up the camera on the device and receiving images from it. It also handles converting the images from the camera to a processable format.
+### scan-payment
 
-### cardscan ui
+[scan-payment](https://github.com/getbouncer/scan-payment-android) contains the code for validating and managing payment cards.
 
-[CardScan UI](https://github.com/getbouncer/cardscan-ui-android) contains some common functionality shared between user interfaces. This provides the card viewfinder, debug overlay, and base scan activity.
+### scan-ui-card
 
-### cardscan
+[scan-ui-card](https://github.com/getbouncer/scan-payment-android) contains some common functionality shared between user interfaces for scanning cards. This provides the card viewfinder, debug overlay, and base scan activity.
 
-[CardScan](https://github.com/getbouncer/cardscan-android) provides a user interface for scanning payment cards. The demo uses this to capture a card to later verify. See the [CardScan Demo](https://github.com/getbouncer/cardscan-demo-android) for more details.
+### cardscan-ui
+
+[CardScan UI](https://github.com/getbouncer/cardscan-ui-android) provides a user interface for scanning payment cards.
 
 ## Building
 
 Check out the project using `git`. Note that this project makes use of submodules, so a `recursive` clone is recommended.
 ```bash
-git clone --recursive https://github.com/getbouncer/cardscan-android
+git clone --recursive https://github.com/getbouncer/cardscan-ui-android
 ```
 
 To build the project, run the following command:
 ```bash
-./gradlew cardscan:build
+./gradlew cardscan-ui:build
 ```
 
 To create an AAR release of the app, run the following command:
 ```bash
-./gradlew cardscan:assembleRelease
+./gradlew cardscan-ui:assembleRelease
 ```
-This will place an AAR file in `cardscan/build/outputs/aar`
+This will place an AAR file in `cardscan-ui/build/outputs/aar`
 
 ## Contributing
 
-CardScan libraries follow a standard github contribution flow.
+These libraries follow a standard github contribution flow.
 
 1. Create a new github feature branch
     ```bash
