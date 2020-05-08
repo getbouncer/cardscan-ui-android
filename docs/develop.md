@@ -20,7 +20,7 @@ This library consists of these modules and a demo app:
 * [scan-framework](#scan-framework)
 * [scan-camera](#scan-camera)
 * [scan-payment](#scan-payment)
-* [scan-ui-card](#scan-ui-card)
+* [scan-ui](#scan-ui)
 * [cardscan-ui](#cardscan-ui)
 
 ### scan-framework
@@ -35,9 +35,9 @@ This library consists of these modules and a demo app:
 
 [scan-payment](https://github.com/getbouncer/scan-payment-android) contains the code for validating and managing payment cards.
 
-### scan-ui-card
+### scan-ui
 
-[scan-ui-card](https://github.com/getbouncer/scan-payment-android) contains some common functionality shared between user interfaces for scanning cards. This provides the card viewfinder, debug overlay, and base scan activity.
+[scan-ui](https://github.com/getbouncer/scan-ui-android) contains some common functionality shared between user interfaces for scanning cards. This provides the card viewfinder, debug overlay, and base scan activity.
 
 ### cardscan-ui
 
