@@ -317,7 +317,7 @@ class CardScanActivity : ScanActivity<SSDOcr.SSDOcrInput, Unit, PaymentCardPanOc
     private val mainLoopIsProducingResultsMutex = Mutex()
     private var mainLoopIsProducingResults: Boolean = false
 
-    override val viewFinderRect by lazy {
+    private val viewFinderRect by lazy {
         Rect(
             viewFinderWindow.left,
             viewFinderWindow.top,
