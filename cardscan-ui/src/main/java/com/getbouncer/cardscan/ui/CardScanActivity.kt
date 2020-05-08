@@ -6,6 +6,7 @@ import android.content.Intent
 import android.graphics.PointF
 import android.graphics.Rect
 import android.os.Bundle
+import android.os.Parcelable
 import android.util.Size
 import android.view.TextureView
 import android.view.View
@@ -38,6 +39,7 @@ import com.getbouncer.scan.ui.card.util.fadeOut
 import com.getbouncer.scan.ui.card.util.getColorByRes
 import com.getbouncer.scan.ui.card.util.setAnimated
 import com.getbouncer.scan.ui.card.util.setVisible
+import kotlinx.android.parcel.Parcelize
 import kotlinx.android.synthetic.main.bouncer_activity_card_scan.cameraTexture
 import kotlinx.android.synthetic.main.bouncer_activity_card_scan.cardPanTextView
 import kotlinx.android.synthetic.main.bouncer_activity_card_scan.cardscanLogo
@@ -76,7 +78,7 @@ interface CardScanActivityResultHandler {
     /**
      * A payment card was successfully scanned.
      */
-    fun cardScanned(scanId: String?, scanResult: ScanResult)
+    fun cardScanned(scanId: String?, scanResult: CardScanActivityResult)
 
     /**
      * The user requested to enter payment card details manually.
@@ -103,6 +105,17 @@ interface CardScanActivityResultHandler {
      */
     fun canceledUnknown(scanId: String?)
 }
+
+@Parcelize
+data class CardScanActivityResult(
+    val pan: String?,
+    val expiryDay: String?,
+    val expiryMonth: String?,
+    val expiryYear: String?,
+    val networkName: String?,
+    val cvc: String?,
+    val legalName: String?
+) : Parcelable
 
 class CardScanActivity : ScanActivity<SSDOcr.SSDOcrInput, Unit, PaymentCardPanOcr, String>(),
     AggregateResultListener<SSDOcr.SSDOcrInput, Unit, PaymentCardPanOcr, String> {
@@ -247,7 +260,7 @@ class CardScanActivity : ScanActivity<SSDOcr.SSDOcrInput, Unit, PaymentCardPanOc
         @JvmStatic
         fun parseScanResult(resultCode: Int, data: Intent?, handler: CardScanActivityResultHandler) {
             if (resultCode == Activity.RESULT_OK && data != null) {
-                val scanResult: ScanResult? = data.getParcelableExtra(RESULT_SCANNED_CARD)
+                val scanResult: CardScanActivityResult? = data.getParcelableExtra(RESULT_SCANNED_CARD)
                 if (scanResult != null) {
                     handler.cardScanned(data.scanId(), scanResult)
                 } else {
@@ -412,7 +425,7 @@ class CardScanActivity : ScanActivity<SSDOcr.SSDOcrInput, Unit, PaymentCardPanOc
     /**
      * Card was successfully scanned, return an activity result.
      */
-    private fun cardScanned(result: ScanResult) {
+    private fun cardScanned(result: CardScanActivityResult) {
         runBlocking { scanStat.trackResult("card_scanned") }
         completeScan(Intent().putExtra(RESULT_SCANNED_CARD, result))
     }
@@ -502,7 +515,7 @@ class CardScanActivity : ScanActivity<SSDOcr.SSDOcrInput, Unit, PaymentCardPanOc
         result: String,
         frames: Map<String, List<SavedFrame<SSDOcr.SSDOcrInput, Unit, PaymentCardPanOcr>>>
     ) = withContext(Dispatchers.Main) {
-        cardScanned(ScanResult(
+        cardScanned(CardScanActivityResult(
             pan = result,
             networkName = getCardIssuer(result).displayName,
             expiryDay = null,
