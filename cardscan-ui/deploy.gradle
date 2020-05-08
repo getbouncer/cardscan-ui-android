@@ -8,8 +8,8 @@ ext {
     bintrayOrg = 'bouncerpaid'
 
     publishedGroupId = 'com.getbouncer'
-    libraryName = 'cardscan'
-    artifact = 'cardscan'
+    libraryName = 'cardscan-ui'
+    artifact = 'cardscan-ui'
 
     libraryDescription = 'This library provides the framework for running CardScan ML models.'
 
