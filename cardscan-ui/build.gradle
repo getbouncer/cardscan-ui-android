@@ -49,7 +49,7 @@ dependencies {
     implementation fileTree(dir: 'libs', include: ['*.jar'])
     api project(":scan-framework")
     api project(":scan-camera")
-    api project(":scan-ui-card")
+    api project(":scan-ui")
     api project(":scan-payment")
 
     implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:$kotlin_version"
