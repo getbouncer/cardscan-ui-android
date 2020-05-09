@@ -137,7 +137,9 @@ class CardScanActivity : ScanActivity<SSDOcr.SSDOcrInput, Unit, PaymentCardPanOc
          * @param context: A context to use for warming up the analyzers.
          */
         @JvmStatic
-        fun warmUp(context: Context) {
+        fun warmUp(context: Context, apiKey: String) {
+            Config.apiKey = apiKey
+
             GlobalScope.launch(Dispatchers.IO) { supervisorScope {
                 analyzerPool = getAnalyzerPool(context)
             } }
