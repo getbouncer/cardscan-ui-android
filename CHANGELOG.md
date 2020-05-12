@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.0.0007](https://github.com/getbouncer/cardscan-ui-android/tree/2.0.0007) (2020-05-12)
+
+[Full Changelog](https://github.com/getbouncer/cardscan-ui-android/compare/2.0.0005...2.0.0007)
+
+**Merged pull requests:**
+
+- Update submodules [\#4](https://github.com/getbouncer/cardscan-ui-android/pull/4) ([awushensky](https://github.com/awushensky))
+- Set api key on warmup [\#3](https://github.com/getbouncer/cardscan-ui-android/pull/3) ([awushensky](https://github.com/awushensky))
+
 ## [2.0.0005](https://github.com/getbouncer/cardscan-ui-android/tree/2.0.0005) (2020-05-08)
 
 [Full Changelog](https://github.com/getbouncer/cardscan-ui-android/compare/ebb299b0e1b799ec7c12aff1f535d0278d9107c1...2.0.0005)
