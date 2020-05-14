@@ -513,9 +513,12 @@ class CardScanActivity : ScanActivity<SSDOcr.SSDOcrInput, Unit, PaymentCardPanOc
     override suspend fun onResult(
         result: String,
         frames: Map<String, List<SavedFrame<SSDOcr.SSDOcrInput, Unit, PaymentCardPanOcr>>>
-    ) = launch(Dispatchers.Main) { // TODO: awushensky - I don't understand why, but withContext
-                                   // never executes when using Camera1 APIs. Best guess is that
-                                   // camera1 is keeping the main thread more tied up with preview.
+    ) = launch(Dispatchers.Main) {
+        /*
+         * TODO: awushensky - I don't understand why, but withContext instead of launch never
+         * suspends indefinitely while using Camera1 APIs. My best guess is that camera1 is keeping
+         * the main thread more tied up with preview than camera2 and cameraX do.
+         */
         cardScanned(
             CardScanActivityResult(
                 pan = result,
