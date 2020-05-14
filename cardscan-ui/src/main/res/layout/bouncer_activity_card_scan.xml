@@ -14,14 +14,7 @@
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" >
-
-        <TextureView
-            android:id="@+id/cameraTexture"
-            android:layout_height="match_parent"
-            android:layout_width="match_parent" />
-
-    </FrameLayout>
+        app:layout_constraintTop_toTopOf="parent" />
 
     <com.getbouncer.scan.ui.ViewFinderBackground
         android:id="@+id/viewFinderBackground"
@@ -39,8 +32,10 @@
         android:layout_width="192dp"
         android:layout_height="120dp"
         android:visibility="invisible"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintStart_toStartOf="parent" >
+        app:layout_constraintTop_toBottomOf="@id/cardDetailsView"
+        app:layout_constraintBottom_toTopOf="@id/enterCardManuallyButtonView"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" >
 
         <ImageView
             android:id="@+id/debugBitmapView"
@@ -101,11 +96,12 @@
         android:visibility="invisible"
         android:text="@string/bouncer_enter_card_manually"
         style="@style/BouncerEnterCardManually.Default"
-        app:layout_constraintTop_toBottomOf="@id/viewFinderWindow"
+        app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
 
     <LinearLayout
+        android:id="@+id/cardDetailsView"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:orientation="vertical"
@@ -114,7 +110,7 @@
         android:layout_marginBottom="@dimen/bouncerCardDetailsMargin"
         android:layout_marginStart="@dimen/bouncerCardDetailsMargin"
         android:layout_marginEnd="@dimen/bouncerCardDetailsMargin"
-        app:layout_constraintTop_toBottomOf="@id/enterCardManuallyButtonView"
+        app:layout_constraintTop_toBottomOf="@id/viewFinderWindow"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" >
 
@@ -131,8 +127,6 @@
         android:id="@+id/closeButtonView"
         android:src="@drawable/bouncer_close_button_dark"
         android:contentDescription="@string/bouncer_close_button_description"
-        android:layout_marginStart="@dimen/bouncerButtonMargin"
-        android:layout_marginTop="@dimen/bouncerButtonMargin"
         android:layout_height="wrap_content"
         android:layout_width="wrap_content"
         app:layout_constraintStart_toStartOf="parent"
@@ -142,9 +136,6 @@
         android:id="@+id/flashButtonView"
         android:src="@drawable/bouncer_flash_off_dark"
         android:contentDescription="@string/bouncer_close_button_description"
-        android:layout_marginEnd="@dimen/bouncerButtonMargin"
-        android:layout_marginTop="@dimen/bouncerButtonMargin"
-        android:visibility="invisible"
         android:layout_height="wrap_content"
         android:layout_width="wrap_content"
         app:layout_constraintEnd_toEndOf="parent"
