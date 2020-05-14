@@ -515,9 +515,10 @@ class CardScanActivity : ScanActivity<SSDOcr.SSDOcrInput, Unit, PaymentCardPanOc
         frames: Map<String, List<SavedFrame<SSDOcr.SSDOcrInput, Unit, PaymentCardPanOcr>>>
     ) = launch(Dispatchers.Main) {
         /*
-         * TODO: awushensky - I don't understand why, but withContext instead of launch never
-         * suspends indefinitely while using Camera1 APIs. My best guess is that camera1 is keeping
-         * the main thread more tied up with preview than camera2 and cameraX do.
+         * TODO: awushensky - I don't understand why, but withContext instead of launch suspends
+         * indefinitely while using Camera1 APIs. My best guess is that camera1 is keeping the main
+         * thread more tied up with preview than camera2 and cameraX do, and launch is allowing the
+         * camera to close before suspending.
          */
         cardScanned(
             CardScanActivityResult(
