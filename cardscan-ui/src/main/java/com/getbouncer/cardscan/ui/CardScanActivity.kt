@@ -8,8 +8,8 @@ import android.graphics.Rect
 import android.os.Bundle
 import android.os.Parcelable
 import android.util.Size
-import android.view.TextureView
 import android.view.View
+import android.widget.FrameLayout
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import com.getbouncer.scan.framework.AggregateResultListener
@@ -40,7 +40,7 @@ import com.getbouncer.scan.ui.util.getColorByRes
 import com.getbouncer.scan.ui.util.setAnimated
 import com.getbouncer.scan.ui.util.setVisible
 import kotlinx.android.parcel.Parcelize
-import kotlinx.android.synthetic.main.bouncer_activity_card_scan.cameraTexture
+import kotlinx.android.synthetic.main.bouncer_activity_card_scan.cameraPreviewHolder
 import kotlinx.android.synthetic.main.bouncer_activity_card_scan.cardPanTextView
 import kotlinx.android.synthetic.main.bouncer_activity_card_scan.cardscanLogo
 import kotlinx.android.synthetic.main.bouncer_activity_card_scan.closeButtonView
@@ -60,11 +60,10 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.withContext
 
 private const val REQUEST_CODE = 21521 // "bou"
 
-private val MINIMUM_RESOLUTION = Size(750, 750) // minimum size of an object square
+private val MINIMUM_RESOLUTION = Size(1280, 720) // minimum size of an object square
 
 enum class State(val value: Int) {
     NOT_FOUND(0),
@@ -330,7 +329,7 @@ class CardScanActivity : ScanActivity<SSDOcr.SSDOcrInput, Unit, PaymentCardPanOc
 
     override val minimumAnalysisResolution: Size = MINIMUM_RESOLUTION
 
-    override val previewTextureView: TextureView? by lazy { cameraTexture }
+    override val previewFrame: FrameLayout by lazy { cameraPreviewHolder }
 
     /**
      * During on create
@@ -366,12 +365,12 @@ class CardScanActivity : ScanActivity<SSDOcr.SSDOcrInput, Unit, PaymentCardPanOc
 
     override fun onResume() {
         super.onResume()
+        setStateNotFound()
         viewFinderBackground.setOnDrawListener { updateIcons() }
     }
 
     override fun onPause() {
         super.onPause()
-        setStateNotFound()
         viewFinderBackground.clearOnDrawListener()
     }
 
@@ -437,9 +436,7 @@ class CardScanActivity : ScanActivity<SSDOcr.SSDOcrInput, Unit, PaymentCardPanOc
     }
 
     override fun buildFrameConverter() = CardImageFrameConverter(
-        previewSize = previewTextureView?.let {
-            Size(it.width, it.height)
-        } ?: minimumAnalysisResolution,
+        previewSize = Size(previewFrame.width, previewFrame.height),
         cardFinder = viewFinderRect
     )
 
@@ -488,7 +485,7 @@ class CardScanActivity : ScanActivity<SSDOcr.SSDOcrInput, Unit, PaymentCardPanOc
         if (scanState != State.FOUND) {
             viewFinderBackground.setBackgroundColor(getColorByRes(R.color.bouncerFoundBackground))
             viewFinderWindow.setBackgroundResource(R.drawable.bouncer_card_background_found)
-            setAnimated(viewFinderBorder, R.drawable.bouncer_card_border_found)
+//            setAnimated(viewFinderBorder, R.drawable.bouncer_card_border_found)
             instructionsTextView.setText(R.string.bouncer_card_scan_instructions)
         }
         scanState = State.FOUND
@@ -504,7 +501,7 @@ class CardScanActivity : ScanActivity<SSDOcr.SSDOcrInput, Unit, PaymentCardPanOc
     }
 
     override fun prepareCamera(onCameraReady: () -> Unit) {
-        cameraTexture.post {
+        previewFrame.post {
             viewFinderBackground.setViewFinderRect(viewFinderRect)
             onCameraReady()
         }
@@ -516,17 +513,25 @@ class CardScanActivity : ScanActivity<SSDOcr.SSDOcrInput, Unit, PaymentCardPanOc
     override suspend fun onResult(
         result: String,
         frames: Map<String, List<SavedFrame<SSDOcr.SSDOcrInput, Unit, PaymentCardPanOcr>>>
-    ) = withContext(Dispatchers.Main) {
-        cardScanned(CardScanActivityResult(
-            pan = result,
-            networkName = getCardIssuer(result).displayName,
-            expiryDay = null,
-            expiryMonth = null,
-            expiryYear = null,
-            cvc = null,
-            legalName = null
-        ))
-    }
+    ) = launch(Dispatchers.Main) {
+        /*
+         * TODO: awushensky - I don't understand why, but withContext instead of launch suspends
+         * indefinitely while using Camera1 APIs. My best guess is that camera1 is keeping the main
+         * thread more tied up with preview than camera2 and cameraX do, and launch is allowing the
+         * camera to close before suspending.
+         */
+        cardScanned(
+            CardScanActivityResult(
+                pan = result,
+                networkName = getCardIssuer(result).displayName,
+                expiryDay = null,
+                expiryMonth = null,
+                expiryYear = null,
+                cvc = null,
+                legalName = null
+            )
+        )
+    }.let { Unit }
 
     /**
      * An interim result was received from the result aggregator.
@@ -536,7 +541,7 @@ class CardScanActivity : ScanActivity<SSDOcr.SSDOcrInput, Unit, PaymentCardPanOc
         state: Unit,
         frame: SSDOcr.SSDOcrInput,
         isFirstValidResult: Boolean
-    ) = withContext(Dispatchers.Main) {
+    ) = launch(Dispatchers.Main) {
         if (Config.isDebug) {
             debugBitmapView.setImageBitmap(frame.fullImage.crop(SSDOcr.calculateCrop(
                 frame.fullImage.size(),
@@ -566,14 +571,14 @@ class CardScanActivity : ScanActivity<SSDOcr.SSDOcrInput, Unit, PaymentCardPanOc
         }
 
         setStateFound()
-    }
+    }.let { Unit }
 
     override suspend fun onInvalidResult(
         result: PaymentCardPanOcr,
         state: Unit,
         frame: SSDOcr.SSDOcrInput,
         hasPreviousValidResult: Boolean
-    ) = withContext(Dispatchers.Main) {
+    ) = launch(Dispatchers.Main) {
         if (Config.isDebug) {
             debugBitmapView.setImageBitmap(frame.fullImage.crop(SSDOcr.calculateCrop(
                 frame.fullImage.size(),
@@ -606,11 +611,9 @@ class CardScanActivity : ScanActivity<SSDOcr.SSDOcrInput, Unit, PaymentCardPanOc
                 setStateNotFound()
             }
         }
-    }
+    }.let { Unit }
 
-    override suspend fun onReset() = withContext(Dispatchers.Main) {
-        setStateNotFound()
-    }
+    override suspend fun onReset() = launch(Dispatchers.Main) { setStateNotFound() }.let { Unit }
 
     override fun getLayoutRes(): Int = R.layout.bouncer_activity_card_scan
 }
