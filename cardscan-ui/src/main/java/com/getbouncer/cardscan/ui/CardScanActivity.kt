@@ -27,11 +27,10 @@ import com.getbouncer.scan.framework.time.ClockMark
 import com.getbouncer.scan.framework.time.seconds
 import com.getbouncer.scan.payment.card.formatPan
 import com.getbouncer.scan.payment.card.getCardIssuer
-import com.getbouncer.scan.payment.card.isValidPan
-import com.getbouncer.scan.payment.ml.PaymentCardPanOcr
 import com.getbouncer.scan.payment.ml.SSDOcr
 import com.getbouncer.scan.payment.ml.ssd.DetectionBox
 import com.getbouncer.scan.payment.result.PaymentCardImageResultAggregator
+import com.getbouncer.scan.payment.result.PaymentCardInterimResult
 import com.getbouncer.scan.ui.DebugDetectionBox
 import com.getbouncer.scan.ui.ScanActivity
 import com.getbouncer.scan.ui.util.fadeIn
@@ -60,6 +59,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import java.util.concurrent.atomic.AtomicBoolean
 
 private const val REQUEST_CODE = 21521 // "bou"
 
@@ -116,8 +116,8 @@ data class CardScanActivityResult(
     val legalName: String?
 ) : Parcelable
 
-class CardScanActivity : ScanActivity<SSDOcr.SSDOcrInput, Unit, PaymentCardPanOcr, String>(),
-    AggregateResultListener<SSDOcr.SSDOcrInput, Unit, PaymentCardPanOcr, String> {
+class CardScanActivity : ScanActivity<SSDOcr.Input, Unit, SSDOcr.Prediction, PaymentCardInterimResult, String>(),
+    AggregateResultListener<SSDOcr.Input, Unit, PaymentCardInterimResult, String> {
 
     companion object {
         private const val PARAM_REQUIRED_CARD_NUMBER = "requiredCardNumber"
@@ -286,9 +286,9 @@ class CardScanActivity : ScanActivity<SSDOcr.SSDOcrInput, Unit, PaymentCardPanOc
         fun isScanResult(requestCode: Int) = REQUEST_CODE == requestCode
 
         private val analyzerPoolMutex = Mutex()
-        private var analyzerPool: AnalyzerPool<SSDOcr.SSDOcrInput, Unit, PaymentCardPanOcr>? = null
+        private var analyzerPool: AnalyzerPool<SSDOcr.Input, Unit, SSDOcr.Prediction>? = null
         private suspend fun getAnalyzerPool(context: Context):
-                AnalyzerPool<SSDOcr.SSDOcrInput, Unit, PaymentCardPanOcr> = analyzerPoolMutex.withLock {
+                AnalyzerPool<SSDOcr.Input, Unit, SSDOcr.Prediction> = analyzerPoolMutex.withLock {
             var analyzerPool = analyzerPool
             if (analyzerPool == null) {
                 analyzerPool = AnalyzerPool.Factory(SSDOcr.Factory(context, SSDOcr.ModelLoader(context))).buildAnalyzerPool()
@@ -317,6 +317,8 @@ class CardScanActivity : ScanActivity<SSDOcr.SSDOcrInput, Unit, PaymentCardPanOc
 
     private val mainLoopIsProducingResultsMutex = Mutex()
     private var mainLoopIsProducingResults: Boolean = false
+
+    private val hasPreviousValidResult = AtomicBoolean(false)
 
     private val viewFinderRect by lazy {
         Rect(
@@ -452,8 +454,8 @@ class CardScanActivity : ScanActivity<SSDOcr.SSDOcrInput, Unit, PaymentCardPanOc
     )
 
     override fun buildMainLoop(
-        resultAggregator: ResultAggregator<SSDOcr.SSDOcrInput, Unit, PaymentCardPanOcr, String>
-    ): ProcessBoundAnalyzerLoop<SSDOcr.SSDOcrInput, Unit, PaymentCardPanOcr> =
+        resultAggregator: ResultAggregator<SSDOcr.Input, Unit, SSDOcr.Prediction, PaymentCardInterimResult, String>
+    ): ProcessBoundAnalyzerLoop<SSDOcr.Input, Unit, SSDOcr.Prediction> =
         ProcessBoundAnalyzerLoop(
             analyzerPool = runBlocking { getAnalyzerPool(this@CardScanActivity) },
             resultHandler = resultAggregator,
@@ -512,7 +514,7 @@ class CardScanActivity : ScanActivity<SSDOcr.SSDOcrInput, Unit, PaymentCardPanOc
      */
     override suspend fun onResult(
         result: String,
-        frames: Map<String, List<SavedFrame<SSDOcr.SSDOcrInput, Unit, PaymentCardPanOcr>>>
+        frames: Map<String, List<SavedFrame<SSDOcr.Input, Unit, PaymentCardInterimResult>>>
     ) = launch(Dispatchers.Main) {
         /*
          * TODO: awushensky - I don't understand why, but withContext instead of launch suspends
@@ -537,10 +539,9 @@ class CardScanActivity : ScanActivity<SSDOcr.SSDOcrInput, Unit, PaymentCardPanOc
      * An interim result was received from the result aggregator.
      */
     override suspend fun onInterimResult(
-        result: PaymentCardPanOcr,
+        result: PaymentCardInterimResult,
         state: Unit,
-        frame: SSDOcr.SSDOcrInput,
-        isFirstValidResult: Boolean
+        frame: SSDOcr.Input
     ) = launch(Dispatchers.Main) {
         if (Config.isDebug) {
             debugBitmapView.setImageBitmap(frame.fullImage.crop(SSDOcr.calculateCrop(
@@ -548,7 +549,7 @@ class CardScanActivity : ScanActivity<SSDOcr.SSDOcrInput, Unit, PaymentCardPanOc
                 frame.previewSize,
                 frame.cardFinder
             )).scale(SSDOcr.Factory.TRAINED_IMAGE_SIZE))
-            debugOverlayView.setBoxes(result.detectedBoxes.map { it.forDebug() })
+            debugOverlayView.setBoxes(result.analyzerResult.detectedBoxes.map { it.forDebug() })
         }
 
         mainLoopIsProducingResultsMutex.withLock {
@@ -558,7 +559,13 @@ class CardScanActivity : ScanActivity<SSDOcr.SSDOcrInput, Unit, PaymentCardPanOc
             }
         }
 
-        val pan = result.pan
+        val isValidResult = result.hasValidPan && result.matchesRequiredCard
+        val isWrongCardResult = result.hasValidPan && !result.matchesRequiredCard
+        val isNoCardResult = !result.hasValidPan
+        val hasPreviousValidResult = hasPreviousValidResult.getAndSet(isValidResult)
+        val isFirstValidResult = isValidResult && !hasPreviousValidResult
+
+        val pan = result.analyzerResult.pan
 
         if (isFirstValidResult) {
             scanStat.trackResult("ocr_pan_observed")
@@ -570,32 +577,9 @@ class CardScanActivity : ScanActivity<SSDOcr.SSDOcrInput, Unit, PaymentCardPanOc
             }
         }
 
-        setStateFound()
-    }.let { Unit }
-
-    override suspend fun onInvalidResult(
-        result: PaymentCardPanOcr,
-        state: Unit,
-        frame: SSDOcr.SSDOcrInput,
-        hasPreviousValidResult: Boolean
-    ) = launch(Dispatchers.Main) {
-        if (Config.isDebug) {
-            debugBitmapView.setImageBitmap(frame.fullImage.crop(SSDOcr.calculateCrop(
-                frame.fullImage.size(),
-                frame.previewSize,
-                frame.cardFinder
-            )))
-            debugOverlayView.setBoxes(result.detectedBoxes.map { it.forDebug() })
-        }
-
-        mainLoopIsProducingResultsMutex.withLock {
-            if (!mainLoopIsProducingResults) {
-                mainLoopIsProducingResults = true
-                scanStat.trackResult("first_image_processed")
-            }
-        }
-
-        if (isValidPan(result.pan) && !hasPreviousValidResult) {
+        if (isValidResult) {
+            setStateFound()
+        } else if (isWrongCardResult) {
             lastWrongCard = Clock.markNow()
             if (requiredCardNumber != null) {
                 instructionsTextView.text = getString(
@@ -604,7 +588,7 @@ class CardScanActivity : ScanActivity<SSDOcr.SSDOcrInput, Unit, PaymentCardPanOc
                 )
             }
             setStateWrong()
-        } else if (!isValidPan(result.pan)) {
+        } else if (isNoCardResult) {
             val lastWrongCard = lastWrongCard
             if (scanState == State.WRONG &&
                 (lastWrongCard == null || lastWrongCard.elapsedSince() > showWrongDuration)) {

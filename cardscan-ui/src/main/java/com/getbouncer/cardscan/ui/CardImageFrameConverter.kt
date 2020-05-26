@@ -12,9 +12,9 @@ import com.getbouncer.scan.payment.ml.SSDOcr
 class CardImageFrameConverter(
     private val previewSize: Size,
     private val cardFinder: Rect
-) : FrameConverter<Bitmap, SSDOcr.SSDOcrInput>() {
+) : FrameConverter<Bitmap, SSDOcr.Input>() {
     override fun convert(source: Bitmap, rotationDegrees: Int) =
-        SSDOcr.SSDOcrInput(
+        SSDOcr.Input(
             fullImage = source.rotate(rotationDegrees.toFloat()),
             previewSize = previewSize,
             cardFinder = cardFinder
