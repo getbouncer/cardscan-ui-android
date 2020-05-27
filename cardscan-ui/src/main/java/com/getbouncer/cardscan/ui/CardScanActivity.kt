@@ -36,6 +36,7 @@ import com.getbouncer.scan.ui.util.fadeOut
 import com.getbouncer.scan.ui.util.getColorByRes
 import com.getbouncer.scan.ui.util.setAnimated
 import com.getbouncer.scan.ui.util.setVisible
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.android.parcel.Parcelize
 import kotlinx.android.synthetic.main.bouncer_activity_card_scan.cameraPreviewHolder
 import kotlinx.android.synthetic.main.bouncer_activity_card_scan.cardPanTextView
@@ -58,7 +59,6 @@ import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import java.util.concurrent.atomic.AtomicBoolean
 
 private const val REQUEST_CODE = 21521 // "bou"
 
