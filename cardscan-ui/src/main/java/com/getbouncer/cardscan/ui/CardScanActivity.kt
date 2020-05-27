@@ -7,7 +7,6 @@ import android.graphics.PointF
 import android.graphics.Rect
 import android.os.Bundle
 import android.os.Parcelable
-import android.util.Log
 import android.util.Size
 import android.view.View
 import android.widget.FrameLayout
@@ -294,6 +293,7 @@ class CardScanActivity : ScanActivity<SSDOcr.Input, Unit, SSDOcr.Prediction, Ocr
 
     private var mainLoopIsProducingResults = AtomicBoolean(false)
     private val hasPreviousValidResult = AtomicBoolean(false)
+    private var lastDebugFrameUpdate = Clock.markNow()
 
     private val viewFinderRect by lazy {
         Rect(
@@ -499,7 +499,6 @@ class CardScanActivity : ScanActivity<SSDOcr.Input, Unit, SSDOcr.Prediction, Ocr
             )
         )
     }.let { Unit }
-    private var updateDebugFrame = Clock.markNow()
 
     /**
      * An interim result was received from the result aggregator.
@@ -509,24 +508,6 @@ class CardScanActivity : ScanActivity<SSDOcr.Input, Unit, SSDOcr.Prediction, Ocr
         state: Unit,
         frame: SSDOcr.Input
     ) = launch(Dispatchers.Main) {
-        if (Config.isDebug && updateDebugFrame.elapsedSince() > 1.seconds) {
-//        if (Config.isDebug) {
-            launch {
-            updateDebugFrame = Clock.markNow()
-                val bitmap = withContext(Dispatchers.IO) {
-                    frame.fullImage.crop(
-                            SSDOcr.calculateCrop(
-                                    frame.fullImage.size(),
-                                    frame.previewSize,
-                                    frame.cardFinder
-                            )
-                    )
-                }
-                debugBitmapView.setImageBitmap(bitmap)
-                debugOverlayView.setBoxes(result.analyzerResult.detectedBoxes.map { it.forDebug() })
-            }
-        }
-
         if (!mainLoopIsProducingResults.getAndSet(true)) {
             scanStat.trackResult("first_image_processed")
         }
@@ -549,6 +530,21 @@ class CardScanActivity : ScanActivity<SSDOcr.Input, Unit, SSDOcr.Prediction, Ocr
 
         if (isValidResult) {
             setStateFound()
+        }
+
+        if (Config.isDebug && lastDebugFrameUpdate.elapsedSince() > 1.seconds) {
+            lastDebugFrameUpdate = Clock.markNow()
+            val bitmap = withContext(Dispatchers.IO) {
+                frame.fullImage.crop(
+                    SSDOcr.calculateCrop(
+                        frame.fullImage.size(),
+                        frame.previewSize,
+                        frame.cardFinder
+                    )
+                )
+            }
+            debugBitmapView.setImageBitmap(bitmap)
+            debugOverlayView.setBoxes(result.analyzerResult.detectedBoxes.map { it.forDebug() })
         }
     }.let { Unit }
 
