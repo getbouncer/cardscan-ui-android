@@ -7,11 +7,13 @@ import android.graphics.PointF
 import android.graphics.Rect
 import android.os.Bundle
 import android.os.Parcelable
+import android.util.Log
 import android.util.Size
 import android.view.View
 import android.widget.FrameLayout
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
+import com.getbouncer.cardscan.ui.result.OcrResultAggregator
 import com.getbouncer.scan.framework.AggregateResultListener
 import com.getbouncer.scan.framework.AnalyzerPool
 import com.getbouncer.scan.framework.Config
@@ -20,17 +22,14 @@ import com.getbouncer.scan.framework.ResultAggregator
 import com.getbouncer.scan.framework.ResultAggregatorConfig
 import com.getbouncer.scan.framework.SavedFrame
 import com.getbouncer.scan.framework.image.crop
-import com.getbouncer.scan.framework.image.scale
 import com.getbouncer.scan.framework.image.size
 import com.getbouncer.scan.framework.time.Clock
-import com.getbouncer.scan.framework.time.ClockMark
 import com.getbouncer.scan.framework.time.seconds
 import com.getbouncer.scan.payment.card.formatPan
 import com.getbouncer.scan.payment.card.getCardIssuer
+import com.getbouncer.scan.payment.card.isValidPan
 import com.getbouncer.scan.payment.ml.SSDOcr
 import com.getbouncer.scan.payment.ml.ssd.DetectionBox
-import com.getbouncer.scan.payment.result.PaymentCardImageResultAggregator
-import com.getbouncer.scan.payment.result.PaymentCardInterimResult
 import com.getbouncer.scan.ui.DebugDetectionBox
 import com.getbouncer.scan.ui.ScanActivity
 import com.getbouncer.scan.ui.util.fadeIn
@@ -59,6 +58,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import java.util.concurrent.atomic.AtomicBoolean
 
 private const val REQUEST_CODE = 21521 // "bou"
@@ -67,8 +67,7 @@ private val MINIMUM_RESOLUTION = Size(1280, 720) // minimum size of an object sq
 
 enum class State(val value: Int) {
     NOT_FOUND(0),
-    FOUND(1),
-    WRONG(2);
+    FOUND(1);
 }
 
 fun DetectionBox.forDebug() = DebugDetectionBox(rect, confidence, label.toString())
@@ -116,11 +115,10 @@ data class CardScanActivityResult(
     val legalName: String?
 ) : Parcelable
 
-class CardScanActivity : ScanActivity<SSDOcr.Input, Unit, SSDOcr.Prediction, PaymentCardInterimResult, String>(),
-    AggregateResultListener<SSDOcr.Input, Unit, PaymentCardInterimResult, String> {
+class CardScanActivity : ScanActivity<SSDOcr.Input, Unit, SSDOcr.Prediction, OcrResultAggregator.InterimResult, String>(),
+    AggregateResultListener<SSDOcr.Input, Unit, OcrResultAggregator.InterimResult, String> {
 
     companion object {
-        private const val PARAM_REQUIRED_CARD_NUMBER = "requiredCardNumber"
         private const val PARAM_ENABLE_ENTER_MANUALLY = "enableEnterManually"
         private const val PARAM_DISPLAY_CARD_PAN = "displayCardPan"
         private const val PARAM_DISPLAY_CARD_SCAN_LOGO = "displayCardScanLogo"
@@ -151,8 +149,6 @@ class CardScanActivity : ScanActivity<SSDOcr.Input, Unit, SSDOcr.Prediction, Pay
          * @param apiKey: The bouncer API key used to run scanning.
          * @param enableEnterCardManually: If true, show a button to enter the card manually.
          * @param displayCardPan: If true, display the card pan once the card has started to scan.
-         * @param requiredCardNumber: If not null, card scan will display an error when scanning a
-         *     card that does not match.
          * @param displayCardScanLogo: If true, display the cardscan.io logo at the top of the
          *     screen.
          * @param enableDebug: If true, enable debug views in card scan.
@@ -164,7 +160,6 @@ class CardScanActivity : ScanActivity<SSDOcr.Input, Unit, SSDOcr.Prediction, Pay
             apiKey: String,
             enableEnterCardManually: Boolean = false,
             displayCardPan: Boolean = false,
-            requiredCardNumber: String? = null,
             displayCardScanLogo: Boolean = true,
             enableDebug: Boolean = Config.isDebug
         ) {
@@ -174,7 +169,6 @@ class CardScanActivity : ScanActivity<SSDOcr.Input, Unit, SSDOcr.Prediction, Pay
                     apiKey = apiKey,
                     enableEnterCardManually = enableEnterCardManually,
                     displayCardPan = displayCardPan,
-                    requiredCardNumber = requiredCardNumber,
                     displayCardScanLogo = displayCardScanLogo,
                     enableDebug = enableDebug
                 ), REQUEST_CODE
@@ -188,8 +182,6 @@ class CardScanActivity : ScanActivity<SSDOcr.Input, Unit, SSDOcr.Prediction, Pay
          * @param apiKey: The bouncer API key used to run scanning.
          * @param enableEnterCardManually: If true, show a button to enter the card manually.
          * @param displayCardPan: If true, display the card pan once the card has started to scan.
-         * @param requiredCardNumber: If not null, card scan will display an error when scanning a
-         *     card that does not match.
          * @param displayCardScanLogo: If true, display the cardscan.io logo at the top of the
          *     screen.
          * @param enableDebug: If true, enable debug views in card scan.
@@ -201,7 +193,6 @@ class CardScanActivity : ScanActivity<SSDOcr.Input, Unit, SSDOcr.Prediction, Pay
             apiKey: String,
             enableEnterCardManually: Boolean = false,
             displayCardPan: Boolean = false,
-            requiredCardNumber: String? = null,
             displayCardScanLogo: Boolean = true,
             enableDebug: Boolean = Config.isDebug
         ) {
@@ -212,7 +203,6 @@ class CardScanActivity : ScanActivity<SSDOcr.Input, Unit, SSDOcr.Prediction, Pay
                     apiKey = apiKey,
                     enableEnterCardManually = enableEnterCardManually,
                     displayCardPan = displayCardPan,
-                    requiredCardNumber = requiredCardNumber,
                     displayCardScanLogo = displayCardScanLogo,
                     enableDebug = enableDebug
                 ), REQUEST_CODE
@@ -226,8 +216,6 @@ class CardScanActivity : ScanActivity<SSDOcr.Input, Unit, SSDOcr.Prediction, Pay
          * @param apiKey: The bouncer API key used to run scanning.
          * @param enableEnterCardManually: If true, show a button to enter the card manually.
          * @param displayCardPan: If true, display the card pan once the card has started to scan.
-         * @param requiredCardNumber: If not null, card scan will display an error when scanning a
-         *     card that does not match.
          * @param displayCardScanLogo: If true, display the cardscan.io logo at the top of the
          *     screen.
          * @param enableDebug: If true, enable debug views in card scan.
@@ -239,23 +227,16 @@ class CardScanActivity : ScanActivity<SSDOcr.Input, Unit, SSDOcr.Prediction, Pay
             apiKey: String,
             enableEnterCardManually: Boolean = false,
             displayCardPan: Boolean = false,
-            requiredCardNumber: String? = null,
             displayCardScanLogo: Boolean = true,
             enableDebug: Boolean = Config.isDebug
         ): Intent {
             Config.apiKey = apiKey
             Config.isDebug = enableDebug
 
-            val intent = Intent(context, CardScanActivity::class.java)
+            return Intent(context, CardScanActivity::class.java)
                 .putExtra(PARAM_DISPLAY_CARD_SCAN_LOGO, displayCardScanLogo)
                 .putExtra(PARAM_ENABLE_ENTER_MANUALLY, enableEnterCardManually)
                 .putExtra(PARAM_DISPLAY_CARD_PAN, displayCardPan)
-
-            if (requiredCardNumber != null) {
-                intent.putExtra(PARAM_REQUIRED_CARD_NUMBER, requiredCardNumber)
-            }
-
-            return intent
         }
 
         @JvmStatic
@@ -286,21 +267,20 @@ class CardScanActivity : ScanActivity<SSDOcr.Input, Unit, SSDOcr.Prediction, Pay
         fun isScanResult(requestCode: Int) = REQUEST_CODE == requestCode
 
         private val analyzerPoolMutex = Mutex()
-        private var analyzerPool: AnalyzerPool<SSDOcr.Input, Unit, SSDOcr.Prediction>? = null
-        private suspend fun getAnalyzerPool(context: Context):
-                AnalyzerPool<SSDOcr.Input, Unit, SSDOcr.Prediction> = analyzerPoolMutex.withLock {
-            var analyzerPool = analyzerPool
-            if (analyzerPool == null) {
-                analyzerPool = AnalyzerPool.Factory(SSDOcr.Factory(context, SSDOcr.ModelLoader(context))).buildAnalyzerPool()
-                Companion.analyzerPool = analyzerPool
+        private var analyzerPool:
+                AnalyzerPool<SSDOcr.Input, Unit, SSDOcr.Prediction>? = null
+        private suspend fun getAnalyzerPool(context: Context): AnalyzerPool<SSDOcr.Input, Unit, SSDOcr.Prediction> =
+            analyzerPoolMutex.withLock {
+                var pool = analyzerPool
+                if (pool == null) {
+                    pool = AnalyzerPool.Factory(SSDOcr.Factory(context, SSDOcr.ModelLoader(context)))
+                            .buildAnalyzerPool()
+                    analyzerPool = pool
+                }
+
+                pool
             }
-
-            return analyzerPool
         }
-    }
-
-    private var lastWrongCard: ClockMark? = null
-    private val showWrongDuration = 1.seconds
 
     private val enableEnterCardManually: Boolean by lazy {
         intent.getBooleanExtra(PARAM_ENABLE_ENTER_MANUALLY, false)
@@ -308,16 +288,11 @@ class CardScanActivity : ScanActivity<SSDOcr.Input, Unit, SSDOcr.Prediction, Pay
     private val displayCardPan: Boolean by lazy {
         intent.getBooleanExtra(PARAM_DISPLAY_CARD_PAN, false)
     }
-    private val requiredCardNumber: String? by lazy {
-        intent.getStringExtra(PARAM_REQUIRED_CARD_NUMBER)
-    }
     private val displayCardScanLogo: Boolean by lazy {
         intent.getBooleanExtra(PARAM_DISPLAY_CARD_SCAN_LOGO, true)
     }
 
-    private val mainLoopIsProducingResultsMutex = Mutex()
-    private var mainLoopIsProducingResults: Boolean = false
-
+    private var mainLoopIsProducingResults = AtomicBoolean(false)
     private val hasPreviousValidResult = AtomicBoolean(false)
 
     private val viewFinderRect by lazy {
@@ -442,19 +417,18 @@ class CardScanActivity : ScanActivity<SSDOcr.Input, Unit, SSDOcr.Prediction, Pay
         cardFinder = viewFinderRect
     )
 
-    override fun buildResultAggregator() = PaymentCardImageResultAggregator(
+    override fun buildResultAggregator() = OcrResultAggregator(
         config = ResultAggregatorConfig.Builder()
             .withMaxTotalAggregationTime(2.seconds)
             .withDefaultMaxSavedFrames(0)
             .build(),
         listener = this,
         name = "main_loop",
-        requiredCardNumber = requiredCardNumber,
         requiredAgreementCount = 5
     )
 
     override fun buildMainLoop(
-        resultAggregator: ResultAggregator<SSDOcr.Input, Unit, SSDOcr.Prediction, PaymentCardInterimResult, String>
+        resultAggregator: ResultAggregator<SSDOcr.Input, Unit, SSDOcr.Prediction, OcrResultAggregator.InterimResult, String>
     ): ProcessBoundAnalyzerLoop<SSDOcr.Input, Unit, SSDOcr.Prediction> =
         ProcessBoundAnalyzerLoop(
             analyzerPool = runBlocking { getAnalyzerPool(this@CardScanActivity) },
@@ -487,19 +461,10 @@ class CardScanActivity : ScanActivity<SSDOcr.Input, Unit, SSDOcr.Prediction, Pay
         if (scanState != State.FOUND) {
             viewFinderBackground.setBackgroundColor(getColorByRes(R.color.bouncerFoundBackground))
             viewFinderWindow.setBackgroundResource(R.drawable.bouncer_card_background_found)
-//            setAnimated(viewFinderBorder, R.drawable.bouncer_card_border_found)
+            setAnimated(viewFinderBorder, R.drawable.bouncer_card_border_found)
             instructionsTextView.setText(R.string.bouncer_card_scan_instructions)
         }
         scanState = State.FOUND
-    }
-
-    private fun setStateWrong() {
-        if (scanState != State.WRONG) {
-            viewFinderBackground.setBackgroundColor(getColorByRes(R.color.bouncerWrongBackground))
-            viewFinderWindow.setBackgroundResource(R.drawable.bouncer_card_background_wrong)
-            setAnimated(viewFinderBorder, R.drawable.bouncer_card_border_wrong)
-        }
-        scanState = State.WRONG
     }
 
     override fun prepareCamera(onCameraReady: () -> Unit) {
@@ -514,7 +479,7 @@ class CardScanActivity : ScanActivity<SSDOcr.Input, Unit, SSDOcr.Prediction, Pay
      */
     override suspend fun onResult(
         result: String,
-        frames: Map<String, List<SavedFrame<SSDOcr.Input, Unit, PaymentCardInterimResult>>>
+        frames: Map<String, List<SavedFrame<SSDOcr.Input, Unit, OcrResultAggregator.InterimResult>>>
     ) = launch(Dispatchers.Main) {
         /*
          * TODO: awushensky - I don't understand why, but withContext instead of launch suspends
@@ -534,34 +499,39 @@ class CardScanActivity : ScanActivity<SSDOcr.Input, Unit, SSDOcr.Prediction, Pay
             )
         )
     }.let { Unit }
+    private var updateDebugFrame = Clock.markNow()
 
     /**
      * An interim result was received from the result aggregator.
      */
     override suspend fun onInterimResult(
-        result: PaymentCardInterimResult,
+        result: OcrResultAggregator.InterimResult,
         state: Unit,
         frame: SSDOcr.Input
     ) = launch(Dispatchers.Main) {
-        if (Config.isDebug) {
-            debugBitmapView.setImageBitmap(frame.fullImage.crop(SSDOcr.calculateCrop(
-                frame.fullImage.size(),
-                frame.previewSize,
-                frame.cardFinder
-            )).scale(SSDOcr.Factory.TRAINED_IMAGE_SIZE))
-            debugOverlayView.setBoxes(result.analyzerResult.detectedBoxes.map { it.forDebug() })
-        }
-
-        mainLoopIsProducingResultsMutex.withLock {
-            if (!mainLoopIsProducingResults) {
-                mainLoopIsProducingResults = true
-                scanStat.trackResult("first_image_processed")
+        if (Config.isDebug && updateDebugFrame.elapsedSince() > 1.seconds) {
+//        if (Config.isDebug) {
+            launch {
+            updateDebugFrame = Clock.markNow()
+                val bitmap = withContext(Dispatchers.IO) {
+                    frame.fullImage.crop(
+                            SSDOcr.calculateCrop(
+                                    frame.fullImage.size(),
+                                    frame.previewSize,
+                                    frame.cardFinder
+                            )
+                    )
+                }
+                debugBitmapView.setImageBitmap(bitmap)
+                debugOverlayView.setBoxes(result.analyzerResult.detectedBoxes.map { it.forDebug() })
             }
         }
 
-        val isValidResult = result.hasValidPan && result.matchesRequiredCard
-        val isWrongCardResult = result.hasValidPan && !result.matchesRequiredCard
-        val isNoCardResult = !result.hasValidPan
+        if (!mainLoopIsProducingResults.getAndSet(true)) {
+            scanStat.trackResult("first_image_processed")
+        }
+
+        val isValidResult = isValidPan(result.analyzerResult.pan)
         val hasPreviousValidResult = hasPreviousValidResult.getAndSet(isValidResult)
         val isFirstValidResult = isValidResult && !hasPreviousValidResult
 
@@ -579,21 +549,6 @@ class CardScanActivity : ScanActivity<SSDOcr.Input, Unit, SSDOcr.Prediction, Pay
 
         if (isValidResult) {
             setStateFound()
-        } else if (isWrongCardResult) {
-            lastWrongCard = Clock.markNow()
-            if (requiredCardNumber != null) {
-                instructionsTextView.text = getString(
-                    R.string.bouncer_scanned_wrong_card,
-                    requiredCardNumber?.takeLast(4) ?: ""
-                )
-            }
-            setStateWrong()
-        } else if (isNoCardResult) {
-            val lastWrongCard = lastWrongCard
-            if (scanState == State.WRONG &&
-                (lastWrongCard == null || lastWrongCard.elapsedSince() > showWrongDuration)) {
-                setStateNotFound()
-            }
         }
     }.let { Unit }
 
