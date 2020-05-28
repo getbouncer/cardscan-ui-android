@@ -26,7 +26,6 @@ import com.getbouncer.scan.framework.time.Clock
 import com.getbouncer.scan.framework.time.seconds
 import com.getbouncer.scan.payment.card.formatPan
 import com.getbouncer.scan.payment.card.getCardIssuer
-import com.getbouncer.scan.payment.card.isValidPan
 import com.getbouncer.scan.payment.ml.SSDOcr
 import com.getbouncer.scan.payment.ml.ssd.DetectionBox
 import com.getbouncer.scan.ui.DebugDetectionBox
@@ -512,9 +511,8 @@ class CardScanActivity : ScanActivity<SSDOcr.Input, Unit, SSDOcr.Prediction, Ocr
             scanStat.trackResult("first_image_processed")
         }
 
-        val isValidResult = isValidPan(result.analyzerResult.pan)
-        val hasPreviousValidResult = hasPreviousValidResult.getAndSet(isValidResult)
-        val isFirstValidResult = isValidResult && !hasPreviousValidResult
+        val hasPreviousValidResult = hasPreviousValidResult.getAndSet(result.hasValidPan)
+        val isFirstValidResult = result.hasValidPan && !hasPreviousValidResult
 
         val pan = result.analyzerResult.pan
 
@@ -528,7 +526,7 @@ class CardScanActivity : ScanActivity<SSDOcr.Input, Unit, SSDOcr.Prediction, Ocr
             }
         }
 
-        if (isValidResult) {
+        if (result.hasValidPan) {
             setStateFound()
         }
 
