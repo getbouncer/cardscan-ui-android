@@ -48,6 +48,7 @@ class OcrResultAggregator(
     override suspend fun aggregateResult(
         result: SSDOcr.Prediction,
         state: Unit,
+        startAggregationTimer: () -> Unit,
         mustReturnFinal: Boolean,
         updateState: (Unit) -> Unit
     ): Pair<InterimResult, String?> {
@@ -57,6 +58,7 @@ class OcrResultAggregator(
         )
 
         val numberCount = if (interimResult.hasValidPan) {
+            startAggregationTimer()
             storeField(result.pan, panResults) // This must be last so numberCount is assigned.
         } else 0
 
