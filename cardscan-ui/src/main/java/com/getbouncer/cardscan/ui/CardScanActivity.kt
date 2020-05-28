@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.PointF
 import android.graphics.Rect
+import android.opengl.Visibility
 import android.os.Bundle
 import android.os.Parcelable
 import android.util.Size
@@ -25,11 +26,13 @@ import com.getbouncer.scan.framework.image.size
 import com.getbouncer.scan.framework.time.Clock
 import com.getbouncer.scan.framework.time.ClockMark
 import com.getbouncer.scan.framework.time.seconds
+import com.getbouncer.scan.payment.analyzer.PaymentCardOcrState
+import com.getbouncer.scan.payment.analyzer.NameDetectAnalyzer
+import com.getbouncer.scan.payment.analyzer.PaymentCardOcrAnalyzer
 import com.getbouncer.scan.payment.card.formatPan
 import com.getbouncer.scan.payment.card.getCardIssuer
 import com.getbouncer.scan.payment.card.isValidPan
-import com.getbouncer.scan.payment.ml.PaymentCardPanOcr
-import com.getbouncer.scan.payment.ml.SSDOcr
+import com.getbouncer.scan.payment.ml.*
 import com.getbouncer.scan.payment.ml.ssd.DetectionBox
 import com.getbouncer.scan.payment.result.PaymentCardImageResultAggregator
 import com.getbouncer.scan.ui.DebugDetectionBox
@@ -40,24 +43,8 @@ import com.getbouncer.scan.ui.util.getColorByRes
 import com.getbouncer.scan.ui.util.setAnimated
 import com.getbouncer.scan.ui.util.setVisible
 import kotlinx.android.parcel.Parcelize
-import kotlinx.android.synthetic.main.bouncer_activity_card_scan.cameraPreviewHolder
-import kotlinx.android.synthetic.main.bouncer_activity_card_scan.cardPanTextView
-import kotlinx.android.synthetic.main.bouncer_activity_card_scan.cardscanLogo
-import kotlinx.android.synthetic.main.bouncer_activity_card_scan.closeButtonView
-import kotlinx.android.synthetic.main.bouncer_activity_card_scan.debugBitmapView
-import kotlinx.android.synthetic.main.bouncer_activity_card_scan.debugOverlayView
-import kotlinx.android.synthetic.main.bouncer_activity_card_scan.debugWindowView
-import kotlinx.android.synthetic.main.bouncer_activity_card_scan.enterCardManuallyButtonView
-import kotlinx.android.synthetic.main.bouncer_activity_card_scan.flashButtonView
-import kotlinx.android.synthetic.main.bouncer_activity_card_scan.instructionsTextView
-import kotlinx.android.synthetic.main.bouncer_activity_card_scan.viewFinderBackground
-import kotlinx.android.synthetic.main.bouncer_activity_card_scan.viewFinderBorder
-import kotlinx.android.synthetic.main.bouncer_activity_card_scan.viewFinderWindow
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.supervisorScope
+import kotlinx.android.synthetic.main.bouncer_activity_card_scan.*
+import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -72,6 +59,10 @@ enum class State(val value: Int) {
 }
 
 fun DetectionBox.forDebug() = DebugDetectionBox(rect, confidence, label.toString())
+fun DetectionBox.forDebugObjDetect(cardFinder: Rect, previewImage: Size) = DebugDetectionBox(
+    calculateCardFinderCoordinatesFromObjectDetection(rect, previewImage, cardFinder), confidence, label.toString())
+
+
 
 interface CardScanActivityResultHandler {
     /**
@@ -116,8 +107,8 @@ data class CardScanActivityResult(
     val legalName: String?
 ) : Parcelable
 
-class CardScanActivity : ScanActivity<SSDOcr.SSDOcrInput, Unit, PaymentCardPanOcr, String>(),
-    AggregateResultListener<SSDOcr.SSDOcrInput, Unit, PaymentCardPanOcr, String> {
+class CardScanActivity : ScanActivity<SSDOcr.SSDOcrInput, PaymentCardOcrState, PaymentCardPanOcrAnalyzerOutput, PaymentCardOcrResult>(),
+    AggregateResultListener<SSDOcr.SSDOcrInput, PaymentCardOcrState, PaymentCardPanOcrAnalyzerOutput, PaymentCardOcrResult> {
 
     companion object {
         private const val PARAM_REQUIRED_CARD_NUMBER = "requiredCardNumber"
@@ -140,7 +131,7 @@ class CardScanActivity : ScanActivity<SSDOcr.SSDOcrInput, Unit, PaymentCardPanOc
             Config.apiKey = apiKey
 
             GlobalScope.launch(Dispatchers.IO) { supervisorScope {
-                analyzerPool = getAnalyzerPool(context)
+                analyzerPool = getAnalyzerPool(GlobalScope, context)
             } }
         }
 
@@ -286,12 +277,23 @@ class CardScanActivity : ScanActivity<SSDOcr.SSDOcrInput, Unit, PaymentCardPanOc
         fun isScanResult(requestCode: Int) = REQUEST_CODE == requestCode
 
         private val analyzerPoolMutex = Mutex()
-        private var analyzerPool: AnalyzerPool<SSDOcr.SSDOcrInput, Unit, PaymentCardPanOcr>? = null
-        private suspend fun getAnalyzerPool(context: Context):
-                AnalyzerPool<SSDOcr.SSDOcrInput, Unit, PaymentCardPanOcr> = analyzerPoolMutex.withLock {
+        private var analyzerPool: AnalyzerPool<SSDOcr.SSDOcrInput, PaymentCardOcrState, PaymentCardPanOcrAnalyzerOutput>? = null
+        private suspend fun getAnalyzerPool(coroutineScope: CoroutineScope, context: Context):
+                AnalyzerPool<SSDOcr.SSDOcrInput, PaymentCardOcrState, PaymentCardPanOcrAnalyzerOutput> = analyzerPoolMutex.withLock {
             var analyzerPool = analyzerPool
             if (analyzerPool == null) {
-                analyzerPool = AnalyzerPool.Factory(SSDOcr.Factory(context, SSDOcr.ModelLoader(context))).buildAnalyzerPool()
+                analyzerPool = AnalyzerPool.Factory(
+                    PaymentCardOcrAnalyzer.Factory(
+                        coroutineScope,
+                        SSDOcr.Factory(context, SSDOcr.ModelLoader(context)),
+                        NameDetectAnalyzer.Factory(
+                            coroutineScope,
+                            context,
+                            SSDObjectDetect.Factory(context,SSDObjectDetect.ModelLoader(context)),
+                            AlphabetDetect.Factory(context, AlphabetDetect.ModelLoader(context))
+                        )
+                    )
+                ).buildAnalyzerPool()
                 Companion.analyzerPool = analyzerPool
             }
 
@@ -442,7 +444,7 @@ class CardScanActivity : ScanActivity<SSDOcr.SSDOcrInput, Unit, PaymentCardPanOc
 
     override fun buildResultAggregator() = PaymentCardImageResultAggregator(
         config = ResultAggregatorConfig.Builder()
-            .withMaxTotalAggregationTime(2.seconds)
+            .withMaxTotalAggregationTime(10.seconds)
             .withDefaultMaxSavedFrames(0)
             .build(),
         listener = this,
@@ -452,12 +454,12 @@ class CardScanActivity : ScanActivity<SSDOcr.SSDOcrInput, Unit, PaymentCardPanOc
     )
 
     override fun buildMainLoop(
-        resultAggregator: ResultAggregator<SSDOcr.SSDOcrInput, Unit, PaymentCardPanOcr, String>
-    ): ProcessBoundAnalyzerLoop<SSDOcr.SSDOcrInput, Unit, PaymentCardPanOcr> =
+        resultAggregator: ResultAggregator<SSDOcr.SSDOcrInput, PaymentCardOcrState, PaymentCardPanOcrAnalyzerOutput, PaymentCardOcrResult>
+    ): ProcessBoundAnalyzerLoop<SSDOcr.SSDOcrInput, PaymentCardOcrState, PaymentCardPanOcrAnalyzerOutput> =
         ProcessBoundAnalyzerLoop(
-            analyzerPool = runBlocking { getAnalyzerPool(this@CardScanActivity) },
+            analyzerPool = runBlocking { getAnalyzerPool(this,this@CardScanActivity) },
             resultHandler = resultAggregator,
-            initialState = Unit,
+            initialState = PaymentCardOcrState(true, false),
             name = "main_loop",
             onAnalyzerFailure = {
                 analyzerFailureCancelScan(it)
@@ -485,7 +487,7 @@ class CardScanActivity : ScanActivity<SSDOcr.SSDOcrInput, Unit, PaymentCardPanOc
         if (scanState != State.FOUND) {
             viewFinderBackground.setBackgroundColor(getColorByRes(R.color.bouncerFoundBackground))
             viewFinderWindow.setBackgroundResource(R.drawable.bouncer_card_background_found)
-//            setAnimated(viewFinderBorder, R.drawable.bouncer_card_border_found)
+            setAnimated(viewFinderBorder, R.drawable.bouncer_card_border_found)
             instructionsTextView.setText(R.string.bouncer_card_scan_instructions)
         }
         scanState = State.FOUND
@@ -511,8 +513,8 @@ class CardScanActivity : ScanActivity<SSDOcr.SSDOcrInput, Unit, PaymentCardPanOc
      * A final result was received from the aggregator. Set the result from this activity.
      */
     override suspend fun onResult(
-        result: String,
-        frames: Map<String, List<SavedFrame<SSDOcr.SSDOcrInput, Unit, PaymentCardPanOcr>>>
+        result: PaymentCardOcrResult,
+        frames: Map<String, List<SavedFrame<SSDOcr.SSDOcrInput, PaymentCardOcrState, PaymentCardPanOcrAnalyzerOutput>>>
     ) = launch(Dispatchers.Main) {
         /*
          * TODO: awushensky - I don't understand why, but withContext instead of launch suspends
@@ -522,13 +524,13 @@ class CardScanActivity : ScanActivity<SSDOcr.SSDOcrInput, Unit, PaymentCardPanOc
          */
         cardScanned(
             CardScanActivityResult(
-                pan = result,
-                networkName = getCardIssuer(result).displayName,
+                pan = result.pan,
+                networkName = getCardIssuer(result.pan).displayName,
                 expiryDay = null,
                 expiryMonth = null,
                 expiryYear = null,
                 cvc = null,
-                legalName = null
+                legalName = result.name
             )
         )
     }.let { Unit }
@@ -537,8 +539,8 @@ class CardScanActivity : ScanActivity<SSDOcr.SSDOcrInput, Unit, PaymentCardPanOc
      * An interim result was received from the result aggregator.
      */
     override suspend fun onInterimResult(
-        result: PaymentCardPanOcr,
-        state: Unit,
+        result: PaymentCardPanOcrAnalyzerOutput,
+        state: PaymentCardOcrState,
         frame: SSDOcr.SSDOcrInput,
         isFirstValidResult: Boolean
     ) = launch(Dispatchers.Main) {
@@ -548,7 +550,8 @@ class CardScanActivity : ScanActivity<SSDOcr.SSDOcrInput, Unit, PaymentCardPanOc
                 frame.previewSize,
                 frame.cardFinder
             )).scale(SSDOcr.Factory.TRAINED_IMAGE_SIZE))
-            debugOverlayView.setBoxes(result.detectedBoxes.map { it.forDebug() })
+            debugOverlayView.setBoxes(result.detectedBoxes?.map { it.forDebug() })
+            debugOverlayView.setBoxes(result.objBoxes?.map { it.forDebugObjDetect(frame.cardFinder, frame.previewSize) })
         }
 
         mainLoopIsProducingResultsMutex.withLock {
@@ -563,10 +566,17 @@ class CardScanActivity : ScanActivity<SSDOcr.SSDOcrInput, Unit, PaymentCardPanOc
         if (isFirstValidResult) {
             scanStat.trackResult("ocr_pan_observed")
             fadeOut(enterCardManuallyButtonView)
-
-            if (displayCardPan) {
+        }
+        if (displayCardPan) {
+            if (pan != null) {
                 cardPanTextView.text = formatPan(pan)
                 fadeIn(cardPanTextView)
+            }
+
+            if (result.name != null) {
+                cardNameTextView.text = result.name
+                cardNameTextView.visibility = View.VISIBLE
+                fadeIn(cardNameTextView)
             }
         }
 
@@ -574,8 +584,8 @@ class CardScanActivity : ScanActivity<SSDOcr.SSDOcrInput, Unit, PaymentCardPanOc
     }.let { Unit }
 
     override suspend fun onInvalidResult(
-        result: PaymentCardPanOcr,
-        state: Unit,
+        result: PaymentCardPanOcrAnalyzerOutput,
+        state: PaymentCardOcrState,
         frame: SSDOcr.SSDOcrInput,
         hasPreviousValidResult: Boolean
     ) = launch(Dispatchers.Main) {
@@ -585,7 +595,8 @@ class CardScanActivity : ScanActivity<SSDOcr.SSDOcrInput, Unit, PaymentCardPanOc
                 frame.previewSize,
                 frame.cardFinder
             )))
-            debugOverlayView.setBoxes(result.detectedBoxes.map { it.forDebug() })
+            debugOverlayView.setBoxes(result.detectedBoxes?.map { it.forDebug() })
+            debugOverlayView.setBoxes(result.objBoxes?.map { it.forDebugObjDetect(frame.cardFinder, frame.previewSize) })
         }
 
         mainLoopIsProducingResultsMutex.withLock {
@@ -595,20 +606,32 @@ class CardScanActivity : ScanActivity<SSDOcr.SSDOcrInput, Unit, PaymentCardPanOc
             }
         }
 
-        if (isValidPan(result.pan) && !hasPreviousValidResult) {
+        if (isValidPan(result.pan) && !hasPreviousValidResult && requiredCardNumber != null) {
             lastWrongCard = Clock.markNow()
-            if (requiredCardNumber != null) {
-                instructionsTextView.text = getString(
-                    R.string.bouncer_scanned_wrong_card,
-                    requiredCardNumber?.takeLast(4) ?: ""
-                )
-            }
+            instructionsTextView.text = getString(
+                R.string.bouncer_scanned_wrong_card,
+                requiredCardNumber?.takeLast(4) ?: ""
+            )
             setStateWrong()
         } else if (!isValidPan(result.pan)) {
             val lastWrongCard = lastWrongCard
             if (scanState == State.WRONG &&
                 (lastWrongCard == null || lastWrongCard.elapsedSince() > showWrongDuration)) {
                 setStateNotFound()
+            }
+        }
+
+        if (Config.isDebug && displayCardPan) {
+            val pan = result.pan
+            if (pan != null) {
+                cardPanTextView.text = formatPan(pan)
+                fadeIn(cardPanTextView)
+            }
+
+            if (result.name != null) {
+                cardNameTextView.text = result.name
+                cardNameTextView.visibility = View.VISIBLE
+                fadeIn(cardNameTextView)
             }
         }
     }.let { Unit }
