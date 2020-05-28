@@ -453,6 +453,7 @@ class CardScanActivity : ScanActivity<SSDOcr.Input, Unit, SSDOcr.Prediction, Ocr
             cardPanTextView.setVisible(false)
             instructionsTextView.setText(R.string.bouncer_card_scan_instructions)
         }
+        hasPreviousValidResult.set(false)
         scanState = State.NOT_FOUND
     }
 
