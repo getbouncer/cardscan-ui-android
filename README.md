@@ -35,7 +35,7 @@ These libraries are published in the [jcenter](https://jcenter.bintray.com/com/g
 
 ```gradle
 dependencies {
-    implementation 'com.getbouncer:cardscan-ui:2.0.0007'
+    implementation 'com.getbouncer:cardscan-ui:2.0.0008'
 }
 ```
 
@@ -134,12 +134,12 @@ After this period commercial applications need to convert to a licensing agreeme
 * Details of licensing (pricing, etc) are available at [https://cardscan.io/pricing](https://cardscan.io/pricing), or you can contact us at [license@getbouncer.com](mailto:license@getbouncer.com).
 
 ### More detailed summary
-What’s allowed under the new license:
+What’s allowed under the license:
 * Free use for any app for 90 days (for demos, evaluations, hackathons, etc).
 * Contributions (contributors must agree to the [Contributor License Agreement](Contributor%20License%20Agreement))
 * Any modifications as needed to work in your app
 
-What’s not allowed under the new license:
+What’s not allowed under the license:
 * Commercial applications using the license for longer than 90 days without a license agreement. 
 * Using us now in a commercial app today? No worries! Just email [license@getbouncer.com](mailto:license@getbouncer.com) and we’ll get you set up.
 * Redistribution under a different license

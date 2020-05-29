@@ -13,10 +13,9 @@ class CardImageFrameConverter(
     private val previewSize: Size,
     private val cardFinder: Rect
 ) : FrameConverter<Bitmap, SSDOcr.SSDOcrInput>() {
-    override fun convert(source: Bitmap, rotationDegrees: Int) =
-        SSDOcr.SSDOcrInput(
-            fullImage = source.rotate(rotationDegrees.toFloat()),
-            previewSize = previewSize,
-            cardFinder = cardFinder
-        )
+    override fun convert(source: Bitmap, rotationDegrees: Int) = SSDOcr.SSDOcrInput(
+        fullImage = source.rotate(rotationDegrees.toFloat()),
+        previewSize = previewSize,
+        cardFinder = cardFinder
+    )
 }
