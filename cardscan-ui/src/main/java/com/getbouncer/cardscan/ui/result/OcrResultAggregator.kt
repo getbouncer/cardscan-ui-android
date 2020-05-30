@@ -1,5 +1,6 @@
 package com.getbouncer.cardscan.ui.result
 
+import android.util.Log
 import com.getbouncer.scan.framework.AggregateResultListener
 import com.getbouncer.scan.framework.ResultAggregator
 import com.getbouncer.scan.framework.ResultAggregatorConfig
@@ -73,10 +74,12 @@ class OcrResultAggregator(
 
         val panExtractionHasMetRequiredAgreementCount =
             if (requiredAgreementCount != null) numberCount >= requiredAgreementCount else false
+        Log.d("HELLOS", "Pan extraciont count number: $panExtractionHasMetRequiredAgreementCount")
 
         if (panExtractionHasMetRequiredAgreementCount) {
             isPanScanningComplete = true
             updateState(state.copy(runOcr = false, runNameExtraction = true))
+            Log.d("HELLOS", "do the thing")
         }
 
         val nameNumberCount = if (result.name != null && result.name!!.isNotEmpty()) {
@@ -91,7 +94,7 @@ class OcrResultAggregator(
         val hasMetRequiredAgreementCount =
             if (requiredAgreementCount != null) numberCount >= requiredAgreementCount else false
 
-        return if (mustReturnFinal || hasMetRequiredAgreementCount) {
+        return if (mustReturnFinal || (isPanScanningComplete && hasName)) {
             //interimResult to getMostLikelyField(panResults)
             interimResult to PaymentCardOcrResult(
                 getMostLikelyField(panResults),

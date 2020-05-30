@@ -432,7 +432,7 @@ class CardScanActivity : ScanActivity<SSDOcr.SSDOcrInput, PaymentCardOcrState, P
 
     override fun buildResultAggregator() = OcrResultAggregator(
         config = ResultAggregatorConfig.Builder()
-            .withMaxTotalAggregationTime(10.seconds)
+            .withMaxTotalAggregationTime(15.seconds)
             .withDefaultMaxSavedFrames(0)
             .build(),
         listener = this,
