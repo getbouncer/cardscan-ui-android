@@ -5,9 +5,9 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.PointF
 import android.graphics.Rect
-import android.opengl.Visibility
 import android.os.Bundle
 import android.os.Parcelable
+import android.util.Log
 import android.util.Size
 import android.view.View
 import android.widget.FrameLayout
@@ -24,13 +24,14 @@ import com.getbouncer.scan.framework.SavedFrame
 import com.getbouncer.scan.framework.image.crop
 import com.getbouncer.scan.framework.image.size
 import com.getbouncer.scan.framework.time.Clock
+import com.getbouncer.scan.framework.time.Duration
 import com.getbouncer.scan.framework.time.seconds
 import com.getbouncer.scan.payment.analyzer.PaymentCardOcrState
 import com.getbouncer.scan.payment.analyzer.NameDetectAnalyzer
 import com.getbouncer.scan.payment.analyzer.PaymentCardOcrAnalyzer
+import com.getbouncer.scan.payment.analyzer.PaymentCardPanOcrAnalyzerOutput
 import com.getbouncer.scan.payment.card.formatPan
 import com.getbouncer.scan.payment.card.getCardIssuer
-import com.getbouncer.scan.payment.card.isValidPan
 import com.getbouncer.scan.payment.ml.*
 import com.getbouncer.scan.payment.ml.ssd.DetectionBox
 import com.getbouncer.scan.ui.DebugDetectionBox
@@ -60,7 +61,6 @@ enum class State(val value: Int) {
 fun DetectionBox.forDebug() = DebugDetectionBox(rect, confidence, label.toString())
 fun DetectionBox.forDebugObjDetect(cardFinder: Rect, previewImage: Size) = DebugDetectionBox(
     calculateCardFinderCoordinatesFromObjectDetection(rect, previewImage, cardFinder), confidence, label.toString())
-
 
 
 interface CardScanActivityResultHandler {
@@ -113,6 +113,7 @@ class CardScanActivity : ScanActivity<SSDOcr.SSDOcrInput, PaymentCardOcrState, P
         private const val PARAM_ENABLE_ENTER_MANUALLY = "enableEnterManually"
         private const val PARAM_DISPLAY_CARD_PAN = "displayCardPan"
         private const val PARAM_DISPLAY_CARD_SCAN_LOGO = "displayCardScanLogo"
+        private const val PARAM_DISPLAY_CARDHOLDER_NAME = "displayCardholderName"
 
         private const val CANCELED_REASON_ENTER_MANUALLY = 3
 
@@ -278,8 +279,6 @@ class CardScanActivity : ScanActivity<SSDOcr.SSDOcrInput, PaymentCardOcrState, P
                             coroutineScope,
                             SSDOcr.Factory(context, SSDOcr.ModelLoader(context)),
                             NameDetectAnalyzer.Factory(
-                                coroutineScope,
-                                context,
                                 SSDObjectDetect.Factory(
                                     context,
                                     SSDObjectDetect.ModelLoader(context)
@@ -300,6 +299,11 @@ class CardScanActivity : ScanActivity<SSDOcr.SSDOcrInput, PaymentCardOcrState, P
     private val displayCardPan: Boolean by lazy {
         intent.getBooleanExtra(PARAM_DISPLAY_CARD_PAN, false)
     }
+
+    private val displayCardholderName: Boolean by lazy {
+        intent.getBooleanExtra(PARAM_DISPLAY_CARDHOLDER_NAME, false)
+    }
+
     private val displayCardScanLogo: Boolean by lazy {
         intent.getBooleanExtra(PARAM_DISPLAY_CARD_SCAN_LOGO, true)
     }
@@ -536,20 +540,18 @@ class CardScanActivity : ScanActivity<SSDOcr.SSDOcrInput, PaymentCardOcrState, P
             scanStat.trackResult("ocr_pan_observed")
             fadeOut(enterCardManuallyButtonView)
         }
-        if (displayCardPan) {
-            if (pan != null) {
-                cardPanTextView.text = formatPan(pan)
-                fadeIn(cardPanTextView)
-            }
-
-            if (result.analyzerResult.name != null) {
-                cardNameTextView.text = result.analyzerResult.name
-                cardNameTextView.visibility = View.VISIBLE
-                fadeIn(cardNameTextView)
-            }
+        if (displayCardPan && result.hasValidPan && !pan.isNullOrEmpty()) {
+            cardPanTextView.text = formatPan(pan)
+            fadeIn(cardPanTextView, 2.seconds)
         }
 
-        if (result.hasValidPan) {
+        if (displayCardholderName && result.analyzerResult.name != null) {
+            cardNameTextView.text = result.analyzerResult.name
+            cardNameTextView.visibility = View.VISIBLE
+            fadeIn(cardNameTextView)
+        }
+
+        if (pan != null && pan.length >= 5) {
             setStateFound()
         }
 
@@ -565,8 +567,24 @@ class CardScanActivity : ScanActivity<SSDOcr.SSDOcrInput, PaymentCardOcrState, P
                 )
             }
             debugBitmapView.setImageBitmap(bitmap)
-            debugOverlayView.setBoxes(result.analyzerResult.detectedBoxes?.map { it.forDebug() })
-            debugOverlayView.setBoxes(result.analyzerResult.objBoxes?.map { it.forDebugObjDetect(frame.cardFinder, frame.previewSize) })
+            if (result.analyzerResult.detectedBoxes != null) {
+                debugOverlayView.setBoxes(result.analyzerResult.detectedBoxes?.map { it.forDebug() })
+            }
+            if (result.analyzerResult.objBoxes != null) {
+                debugOverlayView.setBoxes(result.analyzerResult.objBoxes?.map {it.forDebugObjDetect(frame.cardFinder, frame.previewSize) })
+            }
+
+            // always show up to date number and name
+            if (pan != null) {
+                cardPanTextView.text = formatPan(pan)
+                fadeIn(cardPanTextView, 0.seconds)
+            }
+
+            if (result.analyzerResult.name != null) {
+                cardNameTextView.text = result.analyzerResult.name
+                cardNameTextView.visibility = View.VISIBLE
+                fadeIn(cardNameTextView, 0.seconds)
+            }
 
         }
     }.let { Unit }

@@ -1,13 +1,12 @@
 package com.getbouncer.cardscan.ui.result
 
-import android.util.Log
 import com.getbouncer.scan.framework.AggregateResultListener
 import com.getbouncer.scan.framework.ResultAggregator
 import com.getbouncer.scan.framework.ResultAggregatorConfig
 import com.getbouncer.scan.payment.analyzer.PaymentCardOcrState
 import com.getbouncer.scan.payment.card.isValidPan
 import com.getbouncer.scan.payment.ml.PaymentCardOcrResult
-import com.getbouncer.scan.payment.ml.PaymentCardPanOcrAnalyzerOutput
+import com.getbouncer.scan.payment.analyzer.PaymentCardPanOcrAnalyzerOutput
 import com.getbouncer.scan.payment.ml.SSDOcr
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -43,11 +42,11 @@ class OcrResultAggregator(
 
     private val storeFieldMutex = Mutex()
     private val panResults = mutableMapOf<String, Int>()
-
     private val nameResults = mutableMapOf<String, Int>()
 
+    private val statusMutex = Mutex()
     protected var isPanScanningComplete: Boolean = false
-    protected var hasName: Boolean = false
+    protected var isNameFound: Boolean = false
 
     override fun resetAndPause() {
         super.resetAndPause()
@@ -72,30 +71,24 @@ class OcrResultAggregator(
             storeField(result.pan, panResults) // This must be last so numberCount is assigned.
         } else 0
 
-        val panExtractionHasMetRequiredAgreementCount =
-            if (requiredAgreementCount != null) numberCount >= requiredAgreementCount else false
-        Log.d("HELLOS", "Pan extraciont count number: $panExtractionHasMetRequiredAgreementCount")
-
-        if (panExtractionHasMetRequiredAgreementCount) {
-            isPanScanningComplete = true
+        if (!isPanScanningComplete && requiredAgreementCount != null && numberCount >= requiredAgreementCount) {
+            statusMutex.withLock {
+                isPanScanningComplete = true
+            }
             updateState(state.copy(runOcr = false, runNameExtraction = true))
-            Log.d("HELLOS", "do the thing")
         }
 
         val nameNumberCount = if (result.name != null && result.name!!.isNotEmpty()) {
             storeField(result.name, nameResults)
         } else 0
 
-        val nameExtractionHasMetRequiredAgreementCount = nameNumberCount >= 2
-        if (nameExtractionHasMetRequiredAgreementCount) {
-            hasName = true
+        if (!isNameFound && nameNumberCount >= 2) {
+            statusMutex.withLock {
+                isNameFound = true
+            }
         }
 
-        val hasMetRequiredAgreementCount =
-            if (requiredAgreementCount != null) numberCount >= requiredAgreementCount else false
-
-        return if (mustReturnFinal || (isPanScanningComplete && hasName)) {
-            //interimResult to getMostLikelyField(panResults)
+        return if (mustReturnFinal || (isPanScanningComplete && isNameFound)) {
             interimResult to PaymentCardOcrResult(
                 getMostLikelyField(panResults),
                 getMostLikelyField(nameResults, minCount = 2),
