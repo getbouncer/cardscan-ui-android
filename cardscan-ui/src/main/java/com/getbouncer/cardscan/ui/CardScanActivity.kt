@@ -56,7 +56,7 @@ enum class State(val value: Int) {
     FOUND(1);
 }
 
-fun DetectionBox.forDebug() = DebugDetectionBox(rect, confidence, label.toString())
+fun DetectionBox.forDebugPan() = DebugDetectionBox(rect, confidence, label.toString())
 fun DetectionBox.forDebugObjDetect(cardFinder: Rect, previewImage: Size) = DebugDetectionBox(
     calculateCardFinderCoordinatesFromObjectDetection(rect, previewImage, cardFinder), confidence, label.toString())
 
@@ -238,8 +238,7 @@ class CardScanActivity : ScanActivity<SSDOcr.Input, PaymentCardOcrState, Payment
             handler: CardScanActivityResultHandler
         ) {
             if (resultCode == Activity.RESULT_OK && data != null) {
-                val scanResult: CardScanActivityResult? =
-                    data.getParcelableExtra(RESULT_SCANNED_CARD)
+                val scanResult: CardScanActivityResult? = data.getParcelableExtra(RESULT_SCANNED_CARD)
                 if (scanResult != null) {
                     handler.cardScanned(data.scanId(), scanResult)
                 } else {
@@ -565,7 +564,7 @@ class CardScanActivity : ScanActivity<SSDOcr.Input, PaymentCardOcrState, Payment
             }
             debugBitmapView.setImageBitmap(bitmap)
             if (result.analyzerResult.panDetectionBoxes != null) {
-                debugOverlayView.setBoxes(result.analyzerResult.panDetectionBoxes?.map { it.forDebug() })
+                debugOverlayView.setBoxes(result.analyzerResult.panDetectionBoxes?.map { it.forDebugPan() })
             }
             if (result.analyzerResult.objDetectionBoxes != null) {
                 debugOverlayView.setBoxes(result.analyzerResult.objDetectionBoxes?.map {it.forDebugObjDetect(frame.cardFinder, frame.previewSize) })

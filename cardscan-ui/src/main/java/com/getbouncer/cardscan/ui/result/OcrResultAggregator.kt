@@ -46,7 +46,6 @@ class OcrResultAggregator(
     private val panResults = mutableMapOf<String, Int>()
     private val nameResults = mutableMapOf<String, Int>()
 
-    private val statusMutex = Mutex()
     protected var isPanScanningComplete: Boolean = false
     protected var isNameFound: Boolean = false
 
@@ -74,20 +73,16 @@ class OcrResultAggregator(
         } else 0
 
         if (!isPanScanningComplete && requiredAgreementCount != null && numberCount >= requiredAgreementCount) {
-            statusMutex.withLock {
-                isPanScanningComplete = true
-            }
+            isPanScanningComplete = true
             updateState(state.copy(runOcr = false, runNameExtraction = true))
         }
 
-        val nameNumberCount = if (result.name != null && result.name!!.isNotEmpty()) {
+        val nameCount = if (result.name?.isNotEmpty() == true) {
             storeField(result.name, nameResults)
         } else 0
 
-        if (!isNameFound && nameNumberCount >= 2) {
-            statusMutex.withLock {
-                isNameFound = true
-            }
+        if (!isNameFound && nameCount >= 2) {
+            isNameFound = true
         }
 
         return if (mustReturnFinal || (isPanScanningComplete && isNameFound)) {
@@ -103,7 +98,7 @@ class OcrResultAggregator(
 
     private fun <T> getMostLikelyField(storage: Map<T, Int>, minCount: Int = 1): T? {
         val candidate = storage.maxBy { it.value }?.key
-        return if (storage[candidate] != null && storage[candidate]!! >= minCount) {
+        return if (storage[candidate] ?: 0 >= minCount) {
             candidate
         } else null
     }
