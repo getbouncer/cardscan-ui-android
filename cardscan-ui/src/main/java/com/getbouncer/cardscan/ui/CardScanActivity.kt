@@ -5,11 +5,14 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.PointF
 import android.graphics.Rect
+import android.graphics.drawable.Drawable
 import android.os.Bundle
 import android.os.Parcelable
+import android.util.Log
 import android.util.Size
 import android.view.View
 import android.widget.FrameLayout
+import androidx.annotation.DrawableRes
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import com.getbouncer.cardscan.ui.result.OcrResultAggregator
@@ -24,6 +27,7 @@ import com.getbouncer.scan.framework.SavedFrame
 import com.getbouncer.scan.framework.image.crop
 import com.getbouncer.scan.framework.image.size
 import com.getbouncer.scan.framework.time.Clock
+import com.getbouncer.scan.framework.time.milliseconds
 import com.getbouncer.scan.framework.time.seconds
 import com.getbouncer.scan.payment.analyzer.PaymentCardOcrState
 import com.getbouncer.scan.payment.analyzer.NameDetectAnalyzer
@@ -101,7 +105,7 @@ data class CardScanActivityResult(
     val expiryYear: String?,
     val networkName: String?,
     val cvc: String?,
-    val legalName: String?
+    val cardholderName: String?
 ) : Parcelable
 
 class CardScanActivity : ScanActivity<SSDOcr.Input, PaymentCardOcrState, PaymentCardOcrAnalyzer.Prediction, OcrResultAggregator.InterimResult, PaymentCardOcrResult>(),
@@ -109,6 +113,7 @@ class CardScanActivity : ScanActivity<SSDOcr.Input, PaymentCardOcrState, Payment
 
     companion object {
         private const val PARAM_ENABLE_ENTER_MANUALLY = "enableEnterManually"
+        private const val PARAM_ENABLE_NAME_EXTRACTION = "enableNameExtraction"
         private const val PARAM_DISPLAY_CARD_PAN = "displayCardPan"
         private const val PARAM_DISPLAY_CARD_SCAN_LOGO = "displayCardScanLogo"
         private const val PARAM_DISPLAY_CARDHOLDER_NAME = "displayCardholderName"
@@ -124,12 +129,12 @@ class CardScanActivity : ScanActivity<SSDOcr.Input, PaymentCardOcrState, Payment
          * @param context: A context to use for warming up the analyzers.
          */
         @JvmStatic
-        fun warmUp(context: Context, apiKey: String) {
+        fun warmUp(context: Context, apiKey: String, enableNameExtraction: Boolean) {
             Config.apiKey = apiKey
 
             GlobalScope.launch(Dispatchers.IO) {
                 supervisorScope {
-                    analyzerPool = getAnalyzerPool(context)
+                    analyzerPool = getAnalyzerPool(context, enableNameExtraction)
                 }
             }
         }
@@ -151,7 +156,9 @@ class CardScanActivity : ScanActivity<SSDOcr.Input, PaymentCardOcrState, Payment
             activity: Activity,
             apiKey: String,
             enableEnterCardManually: Boolean = false,
+            enableNameExtraction: Boolean = false,
             displayCardPan: Boolean = false,
+            displayCardholderName: Boolean = false,
             displayCardScanLogo: Boolean = true,
             enableDebug: Boolean = Config.isDebug
         ) {
@@ -160,7 +167,9 @@ class CardScanActivity : ScanActivity<SSDOcr.Input, PaymentCardOcrState, Payment
                     context = activity,
                     apiKey = apiKey,
                     enableEnterCardManually = enableEnterCardManually,
+                    enableNameExtraction = enableNameExtraction,
                     displayCardPan = displayCardPan,
+                    displayCardholderName = displayCardholderName,
                     displayCardScanLogo = displayCardScanLogo,
                     enableDebug = enableDebug
                 ), REQUEST_CODE
@@ -218,7 +227,9 @@ class CardScanActivity : ScanActivity<SSDOcr.Input, PaymentCardOcrState, Payment
             context: Context,
             apiKey: String,
             enableEnterCardManually: Boolean = false,
+            enableNameExtraction: Boolean = false,
             displayCardPan: Boolean = false,
+            displayCardholderName: Boolean = false,
             displayCardScanLogo: Boolean = true,
             enableDebug: Boolean = Config.isDebug
         ): Intent {
@@ -228,7 +239,9 @@ class CardScanActivity : ScanActivity<SSDOcr.Input, PaymentCardOcrState, Payment
             return Intent(context, CardScanActivity::class.java)
                 .putExtra(PARAM_DISPLAY_CARD_SCAN_LOGO, displayCardScanLogo)
                 .putExtra(PARAM_ENABLE_ENTER_MANUALLY, enableEnterCardManually)
+                .putExtra(PARAM_ENABLE_NAME_EXTRACTION, enableNameExtraction)
                 .putExtra(PARAM_DISPLAY_CARD_PAN, displayCardPan)
+                .putExtra(PARAM_DISPLAY_CARDHOLDER_NAME, displayCardholderName)
         }
 
         @JvmStatic
@@ -266,21 +279,26 @@ class CardScanActivity : ScanActivity<SSDOcr.Input, PaymentCardOcrState, Payment
         private var analyzerPool: AnalyzerPool<SSDOcr.Input, PaymentCardOcrState, PaymentCardOcrAnalyzer.Prediction>? =
             null
 
-        private suspend fun getAnalyzerPool(context: Context):
+        private suspend fun getAnalyzerPool(context: Context, enableNameExtraction: Boolean):
                 AnalyzerPool<SSDOcr.Input, PaymentCardOcrState, PaymentCardOcrAnalyzer.Prediction> =
             analyzerPoolMutex.withLock {
                 var analyzerPool = analyzerPool
                 if (analyzerPool == null) {
+                    val nameDetectAnalyzer = if (enableNameExtraction) {
+                        NameDetectAnalyzer.Factory(
+                            SSDObjectDetect.Factory(
+                                context,
+                                SSDObjectDetect.ModelLoader(context)
+                            ),
+                            AlphabetDetect.Factory(context, AlphabetDetect.ModelLoader(context))
+                        )
+                    } else {
+                        null
+                    }
                     analyzerPool = AnalyzerPool.Factory(
                         PaymentCardOcrAnalyzer.Factory(
                             SSDOcr.Factory(context, SSDOcr.ModelLoader(context)),
-                            NameDetectAnalyzer.Factory(
-                                SSDObjectDetect.Factory(
-                                    context,
-                                    SSDObjectDetect.ModelLoader(context)
-                                ),
-                                AlphabetDetect.Factory(context, AlphabetDetect.ModelLoader(context))
-                            )
+                            nameDetectAnalyzer
                         )
                     ).buildAnalyzerPool()
                     Companion.analyzerPool = analyzerPool
@@ -292,6 +310,11 @@ class CardScanActivity : ScanActivity<SSDOcr.Input, PaymentCardOcrState, Payment
     private val enableEnterCardManually: Boolean by lazy {
         intent.getBooleanExtra(PARAM_ENABLE_ENTER_MANUALLY, false)
     }
+
+    private val enableNameExtraction: Boolean by lazy {
+        intent.getBooleanExtra(PARAM_ENABLE_NAME_EXTRACTION, false)
+    }
+
     private val displayCardPan: Boolean by lazy {
         intent.getBooleanExtra(PARAM_DISPLAY_CARD_PAN, false)
     }
@@ -432,19 +455,20 @@ class CardScanActivity : ScanActivity<SSDOcr.Input, PaymentCardOcrState, Payment
 
     override fun buildResultAggregator() = OcrResultAggregator(
         config = ResultAggregatorConfig.Builder()
-            .withMaxTotalAggregationTime(15.seconds)
+            .withMaxTotalAggregationTime(if (enableNameExtraction) 15.seconds else 2.seconds)
             .withDefaultMaxSavedFrames(0)
             .build(),
         listener = this,
         name = "main_loop",
-        requiredAgreementCount = 5
+        requiredAgreementCount = 5,
+        isNameExtractionEnabled = enableNameExtraction
     )
 
     override fun buildMainLoop(
         resultAggregator: ResultAggregator<SSDOcr.Input, PaymentCardOcrState, PaymentCardOcrAnalyzer.Prediction, OcrResultAggregator.InterimResult, PaymentCardOcrResult>
     ): ProcessBoundAnalyzerLoop<SSDOcr.Input, PaymentCardOcrState, PaymentCardOcrAnalyzer.Prediction> =
         ProcessBoundAnalyzerLoop(
-            analyzerPool = runBlocking { getAnalyzerPool(this@CardScanActivity) },
+            analyzerPool = runBlocking { getAnalyzerPool(this@CardScanActivity, enableNameExtraction) },
             resultHandler = resultAggregator,
             initialState = PaymentCardOcrState(true, false),
             name = "main_loop",
@@ -472,11 +496,19 @@ class CardScanActivity : ScanActivity<SSDOcr.Input, PaymentCardOcrState, Payment
         scanState = State.NOT_FOUND
     }
 
-    private fun setStateFound() {
+    private fun setStateFoundShort() {
+        setStateFound(R.drawable.bouncer_card_border_found)
+    }
+
+    private fun setStateFoundLong() {
+        setStateFound(R.drawable.bouncer_card_border_found_long)
+    }
+
+    private fun setStateFound(@DrawableRes animation: Int) {
         if (scanState != State.FOUND) {
             viewFinderBackground.setBackgroundColor(getColorByRes(R.color.bouncerFoundBackground))
             viewFinderWindow.setBackgroundResource(R.drawable.bouncer_card_background_found)
-            setAnimated(viewFinderBorder, R.drawable.bouncer_card_border_found)
+            setAnimated(viewFinderBorder, animation)
             instructionsTextView.setText(R.string.bouncer_card_scan_instructions)
         }
         scanState = State.FOUND
@@ -510,7 +542,7 @@ class CardScanActivity : ScanActivity<SSDOcr.Input, PaymentCardOcrState, Payment
                 expiryMonth = null,
                 expiryYear = null,
                 cvc = null,
-                legalName = result.name
+                cardholderName = result.name
             )
         )
     }.let { Unit }
@@ -538,7 +570,7 @@ class CardScanActivity : ScanActivity<SSDOcr.Input, PaymentCardOcrState, Payment
         }
         if (displayCardPan && result.hasValidPan && !pan.isNullOrEmpty()) {
             cardPanTextView.text = formatPan(pan)
-            fadeIn(cardPanTextView, 2.seconds)
+            fadeIn(cardPanTextView, 1.seconds)
         }
 
         if (displayCardholderName && result.analyzerResult.name != null) {
@@ -548,7 +580,11 @@ class CardScanActivity : ScanActivity<SSDOcr.Input, PaymentCardOcrState, Payment
         }
 
         if (pan != null && pan.length >= 5) {
-            setStateFound()
+            if (enableNameExtraction && result.analyzerResult.isNameExtractionAvailable) {
+                setStateFoundLong()
+            } else {
+                setStateFoundShort()
+            }
         }
 
         if (Config.isDebug && lastDebugFrameUpdate.elapsedSince() > 1.seconds) {

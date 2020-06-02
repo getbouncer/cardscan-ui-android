@@ -25,7 +25,8 @@ class OcrResultAggregator(
     config: ResultAggregatorConfig,
     listener: AggregateResultListener<SSDOcr.Input, PaymentCardOcrState, InterimResult, PaymentCardOcrResult>,
     name: String,
-    private val requiredAgreementCount: Int? = null
+    private val requiredAgreementCount: Int? = null,
+    private val isNameExtractionEnabled: Boolean = false
 ) : ResultAggregator<SSDOcr.Input, PaymentCardOcrState, PaymentCardOcrAnalyzer.Prediction, OcrResultAggregator.InterimResult, PaymentCardOcrResult>(
     config = config,
     listener = listener,
@@ -40,14 +41,15 @@ class OcrResultAggregator(
     companion object {
         const val FRAME_TYPE_VALID_NUMBER = "valid_number"
         const val FRAME_TYPE_INVALID_NUMBER = "invalid_number"
+        private const val NAME_UNAVAILABLE_RESPONSE = "<Insufficient API key permissions>"
     }
 
     private val storeFieldMutex = Mutex()
     private val panResults = mutableMapOf<String, Int>()
     private val nameResults = mutableMapOf<String, Int>()
 
-    protected var isPanScanningComplete: Boolean = false
-    protected var isNameFound: Boolean = false
+    private var isPanScanningComplete: Boolean = false
+    private var isNameFound: Boolean = false
 
     override fun resetAndPause() {
         super.resetAndPause()
@@ -85,10 +87,17 @@ class OcrResultAggregator(
             isNameFound = true
         }
 
-        return if (mustReturnFinal || (isPanScanningComplete && isNameFound)) {
+        val isNameExtractionAvailable = isNameExtractionEnabled && result.isNameExtractionAvailable
+
+        return if (mustReturnFinal || (isPanScanningComplete && (!isNameExtractionAvailable || isNameFound))) {
+            val name = if (!result.isNameExtractionAvailable && isNameExtractionEnabled) {
+                NAME_UNAVAILABLE_RESPONSE
+            } else {
+                getMostLikelyField(nameResults, minCount = 2)
+            }
             interimResult to PaymentCardOcrResult(
                 getMostLikelyField(panResults),
-                getMostLikelyField(nameResults, minCount = 2),
+                name,
                 expiry = null
             )
         } else {
