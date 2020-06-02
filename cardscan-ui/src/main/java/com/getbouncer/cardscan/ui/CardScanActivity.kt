@@ -26,6 +26,8 @@ import com.getbouncer.scan.framework.crop
 import com.getbouncer.scan.framework.size
 import com.getbouncer.scan.framework.time.Clock
 import com.getbouncer.scan.framework.time.seconds
+import com.getbouncer.scan.framework.util.memoizeSuspend
+
 import com.getbouncer.scan.payment.analyzer.NameDetectAnalyzer
 import com.getbouncer.scan.payment.analyzer.PaymentCardOcrAnalyzer
 import com.getbouncer.scan.payment.analyzer.PaymentCardOcrState
@@ -63,9 +65,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.supervisorScope
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 private const val REQUEST_CODE = 21521 // "bou"
@@ -149,9 +148,7 @@ class CardScanActivity : ScanActivity<SSDOcr.Input, PaymentCardOcrState, Payment
             Config.apiKey = apiKey
 
             GlobalScope.launch(Dispatchers.IO) {
-                supervisorScope {
-                    analyzerPool = getAnalyzerPool(context, enableNameExtraction)
-                }
+                getAnalyzerPool(context, enableNameExtraction)
             }
         }
 
@@ -291,36 +288,26 @@ class CardScanActivity : ScanActivity<SSDOcr.Input, PaymentCardOcrState, Payment
         @JvmStatic
         fun isScanResult(requestCode: Int) = REQUEST_CODE == requestCode
 
-        private val analyzerPoolMutex = Mutex()
-        private var analyzerPool: AnalyzerPool<SSDOcr.Input, PaymentCardOcrState, PaymentCardOcrAnalyzer.Prediction>? =
-            null
-
-        private suspend fun getAnalyzerPool(context: Context, enableNameExtraction: Boolean):
-                AnalyzerPool<SSDOcr.Input, PaymentCardOcrState, PaymentCardOcrAnalyzer.Prediction> =
-            analyzerPoolMutex.withLock {
-                var analyzerPool = analyzerPool
-                if (analyzerPool == null) {
-                    val nameDetectAnalyzer = if (enableNameExtraction) {
-                        NameDetectAnalyzer.Factory(
-                            SSDObjectDetect.Factory(
-                                context,
-                                SSDObjectDetect.ModelLoader(context)
-                            ),
-                            AlphabetDetect.Factory(context, AlphabetDetect.ModelLoader(context))
-                        )
-                    } else {
-                        null
-                    }
-                    analyzerPool = AnalyzerPool.Factory(
-                        PaymentCardOcrAnalyzer.Factory(
-                            SSDOcr.Factory(context, SSDOcr.ModelLoader(context)),
-                            nameDetectAnalyzer
-                        )
-                    ).buildAnalyzerPool()
-                    Companion.analyzerPool = analyzerPool
-                }
-                analyzerPool
+        private val getAnalyzerPool = memoizeSuspend { context: Context ->
+            val nameDetectAnalyzer = if (enableNameExtraction) {
+                NameDetectAnalyzer.Factory(
+                    SSDObjectDetect.Factory(
+                        context,
+                        SSDObjectDetect.ModelLoader(context)
+                    ),
+                    AlphabetDetect.Factory(context, AlphabetDetect.ModelLoader(context))
+                )
+            } else {
+                null
             }
+
+            AnalyzerPool.Factory(
+                PaymentCardOcrAnalyzer.Factory(
+                    SSDOcr.Factory(context, SSDOcr.ModelLoader(context)),
+                    nameDetectAnalyzer
+                )
+            ).buildAnalyzerPool()
+        }
     }
 
     private val enableEnterCardManually: Boolean by lazy {
