@@ -7,13 +7,13 @@ import android.graphics.PointF
 import android.graphics.Rect
 import android.os.Bundle
 import android.os.Parcelable
-import android.util.Log
 import android.util.Size
 import android.view.View
 import android.widget.FrameLayout
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import com.getbouncer.cardscan.ui.result.OcrResultAggregator
+import com.getbouncer.cardscan.ui.result.PaymentCardOcrResult
 import com.getbouncer.scan.framework.AggregateResultListener
 import com.getbouncer.scan.framework.AnalyzerPool
 import com.getbouncer.scan.framework.Config
@@ -24,12 +24,10 @@ import com.getbouncer.scan.framework.SavedFrame
 import com.getbouncer.scan.framework.image.crop
 import com.getbouncer.scan.framework.image.size
 import com.getbouncer.scan.framework.time.Clock
-import com.getbouncer.scan.framework.time.Duration
 import com.getbouncer.scan.framework.time.seconds
 import com.getbouncer.scan.payment.analyzer.PaymentCardOcrState
 import com.getbouncer.scan.payment.analyzer.NameDetectAnalyzer
 import com.getbouncer.scan.payment.analyzer.PaymentCardOcrAnalyzer
-import com.getbouncer.scan.payment.analyzer.PaymentCardPanOcrAnalyzerOutput
 import com.getbouncer.scan.payment.card.formatPan
 import com.getbouncer.scan.payment.card.getCardIssuer
 import com.getbouncer.scan.payment.ml.*
@@ -106,8 +104,8 @@ data class CardScanActivityResult(
     val legalName: String?
 ) : Parcelable
 
-class CardScanActivity : ScanActivity<SSDOcr.SSDOcrInput, PaymentCardOcrState, PaymentCardPanOcrAnalyzerOutput, OcrResultAggregator.InterimResult, PaymentCardOcrResult>(),
-    AggregateResultListener<SSDOcr.SSDOcrInput, PaymentCardOcrState, OcrResultAggregator.InterimResult, PaymentCardOcrResult> {
+class CardScanActivity : ScanActivity<SSDOcr.Input, PaymentCardOcrState, PaymentCardOcrAnalyzer.Prediction, OcrResultAggregator.InterimResult, PaymentCardOcrResult>(),
+    AggregateResultListener<SSDOcr.Input, PaymentCardOcrState, OcrResultAggregator.InterimResult, PaymentCardOcrResult> {
 
     companion object {
         private const val PARAM_ENABLE_ENTER_MANUALLY = "enableEnterManually"
@@ -131,7 +129,7 @@ class CardScanActivity : ScanActivity<SSDOcr.SSDOcrInput, PaymentCardOcrState, P
 
             GlobalScope.launch(Dispatchers.IO) {
                 supervisorScope {
-                    analyzerPool = getAnalyzerPool(GlobalScope, context)
+                    analyzerPool = getAnalyzerPool(context)
                 }
             }
         }
@@ -266,17 +264,16 @@ class CardScanActivity : ScanActivity<SSDOcr.SSDOcrInput, PaymentCardOcrState, P
         fun isScanResult(requestCode: Int) = REQUEST_CODE == requestCode
 
         private val analyzerPoolMutex = Mutex()
-        private var analyzerPool: AnalyzerPool<SSDOcr.SSDOcrInput, PaymentCardOcrState, PaymentCardPanOcrAnalyzerOutput>? =
+        private var analyzerPool: AnalyzerPool<SSDOcr.Input, PaymentCardOcrState, PaymentCardOcrAnalyzer.Prediction>? =
             null
 
-        private suspend fun getAnalyzerPool(coroutineScope: CoroutineScope, context: Context):
-                AnalyzerPool<SSDOcr.SSDOcrInput, PaymentCardOcrState, PaymentCardPanOcrAnalyzerOutput> =
+        private suspend fun getAnalyzerPool(context: Context):
+                AnalyzerPool<SSDOcr.Input, PaymentCardOcrState, PaymentCardOcrAnalyzer.Prediction> =
             analyzerPoolMutex.withLock {
                 var analyzerPool = analyzerPool
                 if (analyzerPool == null) {
                     analyzerPool = AnalyzerPool.Factory(
                         PaymentCardOcrAnalyzer.Factory(
-                            coroutineScope,
                             SSDOcr.Factory(context, SSDOcr.ModelLoader(context)),
                             NameDetectAnalyzer.Factory(
                                 SSDObjectDetect.Factory(
@@ -445,10 +442,10 @@ class CardScanActivity : ScanActivity<SSDOcr.SSDOcrInput, PaymentCardOcrState, P
     )
 
     override fun buildMainLoop(
-        resultAggregator: ResultAggregator<SSDOcr.SSDOcrInput, PaymentCardOcrState, PaymentCardPanOcrAnalyzerOutput, OcrResultAggregator.InterimResult, PaymentCardOcrResult>
-    ): ProcessBoundAnalyzerLoop<SSDOcr.SSDOcrInput, PaymentCardOcrState, PaymentCardPanOcrAnalyzerOutput> =
+        resultAggregator: ResultAggregator<SSDOcr.Input, PaymentCardOcrState, PaymentCardOcrAnalyzer.Prediction, OcrResultAggregator.InterimResult, PaymentCardOcrResult>
+    ): ProcessBoundAnalyzerLoop<SSDOcr.Input, PaymentCardOcrState, PaymentCardOcrAnalyzer.Prediction> =
         ProcessBoundAnalyzerLoop(
-            analyzerPool = runBlocking { getAnalyzerPool(this, this@CardScanActivity) },
+            analyzerPool = runBlocking { getAnalyzerPool(this@CardScanActivity) },
             resultHandler = resultAggregator,
             initialState = PaymentCardOcrState(true, false),
             name = "main_loop",
@@ -498,7 +495,7 @@ class CardScanActivity : ScanActivity<SSDOcr.SSDOcrInput, PaymentCardOcrState, P
      */
     override suspend fun onResult(
         result: PaymentCardOcrResult,
-        frames: Map<String, List<SavedFrame<SSDOcr.SSDOcrInput, PaymentCardOcrState, OcrResultAggregator.InterimResult>>>
+        frames: Map<String, List<SavedFrame<SSDOcr.Input, PaymentCardOcrState, OcrResultAggregator.InterimResult>>>
     ) = launch(Dispatchers.Main) {
         /*
          * TODO: awushensky - I don't understand why, but withContext instead of launch suspends
@@ -525,7 +522,7 @@ class CardScanActivity : ScanActivity<SSDOcr.SSDOcrInput, PaymentCardOcrState, P
     override suspend fun onInterimResult(
         result: OcrResultAggregator.InterimResult,
         state: PaymentCardOcrState,
-        frame: SSDOcr.SSDOcrInput
+        frame: SSDOcr.Input
     ) = launch(Dispatchers.Main) {
         if (!mainLoopIsProducingResults.getAndSet(true)) {
             scanStat.trackResult("first_image_processed")
@@ -567,11 +564,11 @@ class CardScanActivity : ScanActivity<SSDOcr.SSDOcrInput, PaymentCardOcrState, P
                 )
             }
             debugBitmapView.setImageBitmap(bitmap)
-            if (result.analyzerResult.detectedBoxes != null) {
-                debugOverlayView.setBoxes(result.analyzerResult.detectedBoxes?.map { it.forDebug() })
+            if (result.analyzerResult.panDetectionBoxes != null) {
+                debugOverlayView.setBoxes(result.analyzerResult.panDetectionBoxes?.map { it.forDebug() })
             }
-            if (result.analyzerResult.objBoxes != null) {
-                debugOverlayView.setBoxes(result.analyzerResult.objBoxes?.map {it.forDebugObjDetect(frame.cardFinder, frame.previewSize) })
+            if (result.analyzerResult.objDetectionBoxes != null) {
+                debugOverlayView.setBoxes(result.analyzerResult.objDetectionBoxes?.map {it.forDebugObjDetect(frame.cardFinder, frame.previewSize) })
             }
 
             // always show up to date number and name

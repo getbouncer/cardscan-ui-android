@@ -3,13 +3,15 @@ package com.getbouncer.cardscan.ui.result
 import com.getbouncer.scan.framework.AggregateResultListener
 import com.getbouncer.scan.framework.ResultAggregator
 import com.getbouncer.scan.framework.ResultAggregatorConfig
+import com.getbouncer.scan.payment.analyzer.PaymentCardOcrAnalyzer
 import com.getbouncer.scan.payment.analyzer.PaymentCardOcrState
 import com.getbouncer.scan.payment.card.isValidPan
-import com.getbouncer.scan.payment.ml.PaymentCardOcrResult
-import com.getbouncer.scan.payment.analyzer.PaymentCardPanOcrAnalyzerOutput
 import com.getbouncer.scan.payment.ml.SSDOcr
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+
+
+data class PaymentCardOcrResult(val pan: String?, val name: String?, val expiry: String?)
 
 /**
  * Keep track of the results from the [AnalyzerLoop]. Count the number of times the loop sends each
@@ -21,17 +23,17 @@ import kotlinx.coroutines.sync.withLock
  */
 class OcrResultAggregator(
     config: ResultAggregatorConfig,
-    listener: AggregateResultListener<SSDOcr.SSDOcrInput, PaymentCardOcrState, InterimResult, PaymentCardOcrResult>,
+    listener: AggregateResultListener<SSDOcr.Input, PaymentCardOcrState, InterimResult, PaymentCardOcrResult>,
     name: String,
     private val requiredAgreementCount: Int? = null
-) : ResultAggregator<SSDOcr.SSDOcrInput, PaymentCardOcrState, PaymentCardPanOcrAnalyzerOutput, OcrResultAggregator.InterimResult, PaymentCardOcrResult>(
+) : ResultAggregator<SSDOcr.Input, PaymentCardOcrState, PaymentCardOcrAnalyzer.Prediction, OcrResultAggregator.InterimResult, PaymentCardOcrResult>(
     config = config,
     listener = listener,
     name = name
 ) {
 
     data class InterimResult(
-        val analyzerResult: PaymentCardPanOcrAnalyzerOutput,
+        val analyzerResult: PaymentCardOcrAnalyzer.Prediction,
         val hasValidPan: Boolean
     )
 
@@ -54,7 +56,7 @@ class OcrResultAggregator(
     }
 
     override suspend fun aggregateResult(
-        result: PaymentCardPanOcrAnalyzerOutput,
+        result: PaymentCardOcrAnalyzer.Prediction,
         state: PaymentCardOcrState,
         startAggregationTimer: () -> Unit,
         mustReturnFinal: Boolean,
@@ -117,12 +119,12 @@ class OcrResultAggregator(
     }
 
     // TODO: This should store the least blurry images available
-    override fun getSaveFrameIdentifier(result: InterimResult, frame: SSDOcr.SSDOcrInput): String? =
+    override fun getSaveFrameIdentifier(result: InterimResult, frame: SSDOcr.Input): String? =
         if (result.hasValidPan) {
             FRAME_TYPE_VALID_NUMBER
         } else {
             FRAME_TYPE_INVALID_NUMBER
         }
 
-    override fun getFrameSizeBytes(frame: SSDOcr.SSDOcrInput): Int = frame.fullImage.byteCount
+    override fun getFrameSizeBytes(frame: SSDOcr.Input): Int = frame.fullImage.byteCount
 }
