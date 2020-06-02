@@ -35,7 +35,7 @@ These libraries are published in the [jcenter](https://jcenter.bintray.com/com/g
 
 ```gradle
 dependencies {
-    implementation 'com.getbouncer:cardscan-ui:2.0.0008'
+    implementation 'com.getbouncer:cardscan-ui:2.0.0010'
 }
 ```
 

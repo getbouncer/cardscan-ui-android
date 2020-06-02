@@ -24,8 +24,8 @@ import com.getbouncer.scan.framework.ProcessBoundAnalyzerLoop
 import com.getbouncer.scan.framework.ResultAggregator
 import com.getbouncer.scan.framework.ResultAggregatorConfig
 import com.getbouncer.scan.framework.SavedFrame
-import com.getbouncer.scan.framework.image.crop
-import com.getbouncer.scan.framework.image.size
+import com.getbouncer.scan.framework.crop
+import com.getbouncer.scan.framework.size
 import com.getbouncer.scan.framework.time.Clock
 import com.getbouncer.scan.framework.time.milliseconds
 import com.getbouncer.scan.framework.time.seconds

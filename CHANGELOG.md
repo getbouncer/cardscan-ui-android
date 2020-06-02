@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.0.0009](https://github.com/getbouncer/cardscan-ui-android/tree/2.0.0009) (2020-05-29)
+
+[Full Changelog](https://github.com/getbouncer/cardscan-ui-android/compare/2.0.0008...2.0.0009)
+
+**Merged pull requests:**
+
+- Reset previously valid result [\#16](https://github.com/getbouncer/cardscan-ui-android/pull/16) ([awushensky](https://github.com/awushensky))
+- Bump core-ktx from 1.2.0 to 1.3.0 [\#15](https://github.com/getbouncer/cardscan-ui-android/pull/15) ([dependabot-preview[bot]](https://github.com/apps/dependabot-preview))
+- Remove isValidPan [\#14](https://github.com/getbouncer/cardscan-ui-android/pull/14) ([awushensky](https://github.com/awushensky))
+- Start result aggregation on valid result [\#13](https://github.com/getbouncer/cardscan-ui-android/pull/13) ([awushensky](https://github.com/awushensky))
+- Simplify results [\#12](https://github.com/getbouncer/cardscan-ui-android/pull/12) ([awushensky](https://github.com/awushensky))
+
 ## [2.0.0008](https://github.com/getbouncer/cardscan-ui-android/tree/2.0.0008) (2020-05-21)
 
 [Full Changelog](https://github.com/getbouncer/cardscan-ui-android/compare/2.0.0007...2.0.0008)
