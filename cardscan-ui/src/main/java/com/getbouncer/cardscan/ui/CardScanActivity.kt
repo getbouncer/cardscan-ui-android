@@ -46,7 +46,6 @@ import com.getbouncer.scan.ui.util.fadeOut
 import com.getbouncer.scan.ui.util.getColorByRes
 import com.getbouncer.scan.ui.util.setAnimated
 import com.getbouncer.scan.ui.util.setVisible
-import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.android.parcel.Parcelize
 import kotlinx.android.synthetic.main.bouncer_activity_card_scan.cameraPreviewHolder
 import kotlinx.android.synthetic.main.bouncer_activity_card_scan.cardNameTextView
@@ -67,6 +66,7 @@ import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
+import java.util.concurrent.atomic.AtomicBoolean
 
 private const val REQUEST_CODE = 21521 // "bou"
 
@@ -79,7 +79,8 @@ enum class State(val value: Int) {
 
 fun DetectionBox.forDebugPan() = DebugDetectionBox(rect, confidence, label.toString())
 fun DetectionBox.forDebugObjDetect(cardFinder: Rect, previewImage: Size) = DebugDetectionBox(
-    calculateCardFinderCoordinatesFromObjectDetection(rect, previewImage, cardFinder), confidence, label.toString())
+    calculateCardFinderCoordinatesFromObjectDetection(rect, previewImage, cardFinder), confidence, label.toString()
+)
 
 interface CardScanActivityResultHandler {
     /**
@@ -124,7 +125,8 @@ data class CardScanActivityResult(
     val cardholderName: String?
 ) : Parcelable
 
-class CardScanActivity : ScanActivity<SSDOcr.Input, PaymentCardOcrState, PaymentCardOcrAnalyzer.Prediction, OcrResultAggregator.InterimResult, PaymentCardOcrResult>(),
+class CardScanActivity :
+    ScanActivity<SSDOcr.Input, PaymentCardOcrState, PaymentCardOcrAnalyzer.Prediction, OcrResultAggregator.InterimResult, PaymentCardOcrResult>(),
     AggregateResultListener<SSDOcr.Input, PaymentCardOcrState, OcrResultAggregator.InterimResult, PaymentCardOcrResult> {
 
     companion object {
@@ -186,7 +188,8 @@ class CardScanActivity : ScanActivity<SSDOcr.Input, PaymentCardOcrState, Payment
                     displayCardholderName = displayCardholderName,
                     displayCardScanLogo = displayCardScanLogo,
                     enableDebug = enableDebug
-                ), REQUEST_CODE
+                ),
+                REQUEST_CODE
             )
         }
 
@@ -223,7 +226,8 @@ class CardScanActivity : ScanActivity<SSDOcr.Input, PaymentCardOcrState, Payment
                     displayCardholderName = displayCardholderName,
                     displayCardScanLogo = displayCardScanLogo,
                     enableDebug = enableDebug
-                ), REQUEST_CODE
+                ),
+                REQUEST_CODE
             )
         }
 
@@ -406,12 +410,8 @@ class CardScanActivity : ScanActivity<SSDOcr.Input, PaymentCardOcrState, Payment
         } else {
             flashButtonView.setImageResource(R.drawable.bouncer_flash_off_dark)
         }
-        instructionsTextView.setTextColor(ContextCompat.getColor(this,
-            R.color.bouncerInstructionsColorDark
-        ))
-        enterCardManuallyButtonView.setTextColor(ContextCompat.getColor(this,
-            R.color.bouncerEnterCardManuallyColorDark
-        ))
+        instructionsTextView.setTextColor(ContextCompat.getColor(this, R.color.bouncerInstructionsColorDark))
+        enterCardManuallyButtonView.setTextColor(ContextCompat.getColor(this, R.color.bouncerEnterCardManuallyColorDark))
         closeButtonView.setImageResource(R.drawable.bouncer_close_button_dark)
         cardscanLogo.setImageResource(R.drawable.bouncer_logo_dark_background)
     }
@@ -422,12 +422,8 @@ class CardScanActivity : ScanActivity<SSDOcr.Input, PaymentCardOcrState, Payment
         } else {
             flashButtonView.setImageResource(R.drawable.bouncer_flash_off_light)
         }
-        instructionsTextView.setTextColor(ContextCompat.getColor(this,
-            R.color.bouncerInstructionsColorLight
-        ))
-        enterCardManuallyButtonView.setTextColor(ContextCompat.getColor(this,
-            R.color.bouncerEnterCardManuallyColorLight
-        ))
+        instructionsTextView.setTextColor(ContextCompat.getColor(this, R.color.bouncerInstructionsColorLight))
+        enterCardManuallyButtonView.setTextColor(ContextCompat.getColor(this, R.color.bouncerEnterCardManuallyColorLight))
         closeButtonView.setImageResource(R.drawable.bouncer_close_button_light)
         cardscanLogo.setImageResource(R.drawable.bouncer_logo_light_background)
     }
@@ -606,8 +602,11 @@ class CardScanActivity : ScanActivity<SSDOcr.Input, PaymentCardOcrState, Payment
                 debugOverlayView.setBoxes(result.analyzerResult.panDetectionBoxes?.map { it.forDebugPan() })
             }
             if (result.analyzerResult.objDetectionBoxes != null) {
-                debugOverlayView.setBoxes(result.analyzerResult.objDetectionBoxes?.map {
-                    it.forDebugObjDetect(frame.cardFinder, frame.previewSize) })
+                debugOverlayView.setBoxes(
+                    result.analyzerResult.objDetectionBoxes?.map {
+                        it.forDebugObjDetect(frame.cardFinder, frame.previewSize)
+                    }
+                )
             }
 
             // always show up to date number and name
