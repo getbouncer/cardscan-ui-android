@@ -59,7 +59,6 @@ import kotlinx.android.synthetic.main.bouncer_activity_card_scan.instructionsTex
 import kotlinx.android.synthetic.main.bouncer_activity_card_scan.viewFinderBackground
 import kotlinx.android.synthetic.main.bouncer_activity_card_scan.viewFinderBorder
 import kotlinx.android.synthetic.main.bouncer_activity_card_scan.viewFinderWindow
-
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
