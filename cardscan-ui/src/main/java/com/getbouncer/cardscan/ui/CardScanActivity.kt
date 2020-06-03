@@ -28,13 +28,9 @@ import com.getbouncer.scan.framework.size
 import com.getbouncer.scan.framework.time.Clock
 import com.getbouncer.scan.framework.time.seconds
 import com.getbouncer.scan.framework.util.memoizeSuspend
-<<<<<<< HEAD
-
 import com.getbouncer.scan.payment.analyzer.NameDetectAnalyzer
 import com.getbouncer.scan.payment.analyzer.PaymentCardOcrAnalyzer
 import com.getbouncer.scan.payment.analyzer.PaymentCardOcrState
-=======
->>>>>>> Add memoization functions
 import com.getbouncer.scan.payment.card.formatPan
 import com.getbouncer.scan.payment.card.getCardIssuer
 import com.getbouncer.scan.payment.ml.AlphabetDetect
@@ -69,10 +65,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
-<<<<<<< HEAD
-=======
-import kotlinx.coroutines.supervisorScope
->>>>>>> Add memoization functions
 import kotlinx.coroutines.withContext
 
 private const val REQUEST_CODE = 21521 // "bou"
