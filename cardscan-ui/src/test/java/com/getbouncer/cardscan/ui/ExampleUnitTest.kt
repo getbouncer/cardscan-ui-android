@@ -1,7 +1,7 @@
 package com.getbouncer.cardscan.ui
 
-import kotlin.test.assertEquals
 import org.junit.Test
+import kotlin.test.assertEquals
 
 class ExampleUnitTest {
     @Test

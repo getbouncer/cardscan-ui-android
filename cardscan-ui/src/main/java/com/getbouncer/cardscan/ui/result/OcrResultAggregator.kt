@@ -3,12 +3,11 @@ package com.getbouncer.cardscan.ui.result
 import com.getbouncer.scan.framework.AggregateResultListener
 import com.getbouncer.scan.framework.ResultAggregator
 import com.getbouncer.scan.framework.ResultAggregatorConfig
+import com.getbouncer.scan.framework.ResultCounter
 import com.getbouncer.scan.payment.analyzer.PaymentCardOcrAnalyzer
 import com.getbouncer.scan.payment.analyzer.PaymentCardOcrState
 import com.getbouncer.scan.payment.card.isValidPan
 import com.getbouncer.scan.payment.ml.SSDOcr
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 
 data class PaymentCardOcrResult(val pan: String?, val name: String?, val expiry: String?)
 
@@ -41,19 +40,19 @@ class OcrResultAggregator(
     companion object {
         const val FRAME_TYPE_VALID_NUMBER = "valid_number"
         const val FRAME_TYPE_INVALID_NUMBER = "invalid_number"
-        private const val NAME_UNAVAILABLE_RESPONSE = "<Insufficient API key permissions>"
+        const val NAME_UNAVAILABLE_RESPONSE = "<Insufficient API key permissions>"
     }
 
-    private val storeFieldMutex = Mutex()
-    private val panResults = mutableMapOf<String, Int>()
-    private val nameResults = mutableMapOf<String, Int>()
+    private val panResults = ResultCounter<String>()
+    private val nameResults = ResultCounter<String>()
 
     private var isPanScanningComplete: Boolean = false
     private var isNameFound: Boolean = false
 
-    override fun resetAndPause() {
-        super.resetAndPause()
-        panResults.clear()
+    override suspend fun reset() {
+        super.reset()
+        panResults.reset()
+        nameResults.reset()
     }
 
     override suspend fun aggregateResult(
@@ -66,13 +65,14 @@ class OcrResultAggregator(
 
         val interimResult = InterimResult(
             analyzerResult = result,
-            mostLikelyPan = getMostLikelyField(panResults),
+            mostLikelyPan = panResults.getMostLikelyResult(),
             hasValidPan = isValidPan(result.pan)
         )
 
-        val numberCount = if (interimResult.hasValidPan) {
+        val pan = result.pan
+        val numberCount = if (pan != null && interimResult.hasValidPan) {
             startAggregationTimer()
-            storeField(result.pan, panResults) // This must be last so numberCount is assigned.
+            panResults.countResult(pan) // This must be last so numberCount is assigned.
         } else 0
 
         if (!isPanScanningComplete && requiredAgreementCount != null && numberCount >= requiredAgreementCount) {
@@ -80,8 +80,9 @@ class OcrResultAggregator(
             updateState(state.copy(runOcr = false, runNameExtraction = true))
         }
 
-        val nameCount = if (result.name?.isNotEmpty() == true) {
-            storeField(result.name, nameResults)
+        val name = result.name
+        val nameCount = if (name?.isNotEmpty() == true) {
+            nameResults.countResult(name)
         } else 0
 
         if (!isNameFound && nameCount >= 2) {
@@ -91,14 +92,14 @@ class OcrResultAggregator(
         val isNameExtractionAvailable = isNameExtractionEnabled && result.isNameExtractionAvailable
 
         return if (mustReturnFinal || (isPanScanningComplete && (!isNameExtractionAvailable || isNameFound))) {
-            val name = if (!result.isNameExtractionAvailable && isNameExtractionEnabled) {
+            val finalName = if (!result.isNameExtractionAvailable && isNameExtractionEnabled) {
                 NAME_UNAVAILABLE_RESPONSE
             } else {
-                getMostLikelyField(nameResults, minCount = 2)
+                nameResults.getMostLikelyResult(minCount = 2)
             }
             interimResult to PaymentCardOcrResult(
-                getMostLikelyField(panResults),
-                name,
+                panResults.getMostLikelyResult(),
+                finalName,
                 expiry = null
             )
         } else {
@@ -106,24 +107,7 @@ class OcrResultAggregator(
         }
     }
 
-    private fun <T> getMostLikelyField(storage: Map<T, Int>, minCount: Int = 1): T? {
-        val candidate = storage.maxBy { it.value }?.key
-        return if (storage[candidate] ?: 0 >= minCount) {
-            candidate
-        } else null
-    }
-
-    private suspend fun <T> storeField(field: T?, storage: MutableMap<T, Int>): Int = storeFieldMutex.withLock {
-        if (field != null) {
-            val count = 1 + (storage[field] ?: 0)
-            storage[field] = count
-            count
-        } else {
-            0
-        }
-    }
-
-    // TODO: This should store the least blurry images available
+    // TODO: This should identify the least blurry images and store them in their own identifier
     override fun getSaveFrameIdentifier(result: InterimResult, frame: SSDOcr.Input): String? =
         if (result.hasValidPan) {
             FRAME_TYPE_VALID_NUMBER
