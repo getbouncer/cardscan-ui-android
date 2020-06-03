@@ -144,12 +144,13 @@ class CardScanActivity : ScanActivity<SSDOcr.Input, PaymentCardOcrState, Payment
          * @param context: A context to use for warming up the analyzers.
          */
         @JvmStatic
-        fun warmUp(context: Context, apiKey: String, enableNameExtraction: Boolean) {
+        @JvmOverloads
+        fun warmUp(context: Context, apiKey: String, enableNameExtraction: Boolean = false) {
             Config.apiKey = apiKey
             Companion.enableNameExtraction = enableNameExtraction
 
-            GlobalScope.launch(Dispatchers.IO) {
-                getAnalyzerPool(context)
+            GlobalScope.launch(Dispatchers.Default) {
+                getAnalyzerPool(context, enableNameExtraction)
             }
         }
 
@@ -291,7 +292,7 @@ class CardScanActivity : ScanActivity<SSDOcr.Input, PaymentCardOcrState, Payment
         fun isScanResult(requestCode: Int) = REQUEST_CODE == requestCode
 
         private var enableNameExtraction: Boolean = false
-        private val getAnalyzerPool = memoizeSuspend { context: Context ->
+        private val getAnalyzerPool = memoizeSuspend { context: Context, enableNameExtraction: Boolean ->
             val nameDetectAnalyzer = if (enableNameExtraction) {
                 NameDetectAnalyzer.Factory(
                     SSDObjectDetect.Factory(
@@ -471,7 +472,7 @@ class CardScanActivity : ScanActivity<SSDOcr.Input, PaymentCardOcrState, Payment
         resultAggregator: ResultAggregator<SSDOcr.Input, PaymentCardOcrState, PaymentCardOcrAnalyzer.Prediction, OcrResultAggregator.InterimResult, PaymentCardOcrResult>
     ): ProcessBoundAnalyzerLoop<SSDOcr.Input, PaymentCardOcrState, PaymentCardOcrAnalyzer.Prediction> =
         ProcessBoundAnalyzerLoop(
-            analyzerPool = runBlocking { getAnalyzerPool(this@CardScanActivity) },
+            analyzerPool = runBlocking { getAnalyzerPool(this@CardScanActivity, enableNameExtraction) },
             resultHandler = resultAggregator,
             initialState = PaymentCardOcrState(true, false),
             name = "main_loop",
@@ -591,7 +592,7 @@ class CardScanActivity : ScanActivity<SSDOcr.Input, PaymentCardOcrState, Payment
 
         if (Config.isDebug && lastDebugFrameUpdate.elapsedSince() > 1.seconds) {
             lastDebugFrameUpdate = Clock.markNow()
-            val bitmap = withContext(Dispatchers.IO) {
+            val bitmap = withContext(Dispatchers.Default) {
                 frame.fullImage.crop(
                     SSDOcr.calculateCrop(
                         frame.fullImage.size(),
