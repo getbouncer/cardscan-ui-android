@@ -1,8 +1,8 @@
 package com.getbouncer.cardscan.ui
 
 import androidx.test.platform.app.InstrumentationRegistry
-import kotlin.test.assertEquals
 import org.junit.Test
+import kotlin.test.assertEquals
 
 class ExampleInstrumentedTest {
     @Test
