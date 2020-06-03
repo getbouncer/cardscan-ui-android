@@ -10,7 +10,6 @@ import com.getbouncer.scan.payment.ml.SSDOcr
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
-
 data class PaymentCardOcrResult(val pan: String?, val name: String?, val expiry: String?)
 
 /**
