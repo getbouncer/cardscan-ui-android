@@ -26,9 +26,9 @@ import com.getbouncer.scan.framework.crop
 import com.getbouncer.scan.framework.size
 import com.getbouncer.scan.framework.time.Clock
 import com.getbouncer.scan.framework.time.seconds
-import com.getbouncer.scan.payment.analyzer.PaymentCardOcrState
 import com.getbouncer.scan.payment.analyzer.NameDetectAnalyzer
 import com.getbouncer.scan.payment.analyzer.PaymentCardOcrAnalyzer
+import com.getbouncer.scan.payment.analyzer.PaymentCardOcrState
 import com.getbouncer.scan.payment.card.formatPan
 import com.getbouncer.scan.payment.card.getCardIssuer
 import com.getbouncer.scan.payment.ml.AlphabetDetect
@@ -45,7 +45,21 @@ import com.getbouncer.scan.ui.util.setAnimated
 import com.getbouncer.scan.ui.util.setVisible
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.android.parcel.Parcelize
-import kotlinx.android.synthetic.main.bouncer_activity_card_scan.*
+import kotlinx.android.synthetic.main.bouncer_activity_card_scan.cameraPreviewHolder
+import kotlinx.android.synthetic.main.bouncer_activity_card_scan.cardNameTextView
+import kotlinx.android.synthetic.main.bouncer_activity_card_scan.cardPanTextView
+import kotlinx.android.synthetic.main.bouncer_activity_card_scan.cardscanLogo
+import kotlinx.android.synthetic.main.bouncer_activity_card_scan.closeButtonView
+import kotlinx.android.synthetic.main.bouncer_activity_card_scan.debugBitmapView
+import kotlinx.android.synthetic.main.bouncer_activity_card_scan.debugOverlayView
+import kotlinx.android.synthetic.main.bouncer_activity_card_scan.debugWindowView
+import kotlinx.android.synthetic.main.bouncer_activity_card_scan.enterCardManuallyButtonView
+import kotlinx.android.synthetic.main.bouncer_activity_card_scan.flashButtonView
+import kotlinx.android.synthetic.main.bouncer_activity_card_scan.instructionsTextView
+import kotlinx.android.synthetic.main.bouncer_activity_card_scan.viewFinderBackground
+import kotlinx.android.synthetic.main.bouncer_activity_card_scan.viewFinderBorder
+import kotlinx.android.synthetic.main.bouncer_activity_card_scan.viewFinderWindow
+
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
@@ -67,7 +81,6 @@ enum class State(val value: Int) {
 fun DetectionBox.forDebugPan() = DebugDetectionBox(rect, confidence, label.toString())
 fun DetectionBox.forDebugObjDetect(cardFinder: Rect, previewImage: Size) = DebugDetectionBox(
     calculateCardFinderCoordinatesFromObjectDetection(rect, previewImage, cardFinder), confidence, label.toString())
-
 
 interface CardScanActivityResultHandler {
     /**
@@ -486,7 +499,6 @@ class CardScanActivity : ScanActivity<SSDOcr.Input, PaymentCardOcrState, Payment
             }
         )
 
-
     private var scanState = State.NOT_FOUND
     private fun setStateNotFound() {
         if (scanState != State.NOT_FOUND) {
@@ -607,7 +619,8 @@ class CardScanActivity : ScanActivity<SSDOcr.Input, PaymentCardOcrState, Payment
                 debugOverlayView.setBoxes(result.analyzerResult.panDetectionBoxes?.map { it.forDebugPan() })
             }
             if (result.analyzerResult.objDetectionBoxes != null) {
-                debugOverlayView.setBoxes(result.analyzerResult.objDetectionBoxes?.map {it.forDebugObjDetect(frame.cardFinder, frame.previewSize) })
+                debugOverlayView.setBoxes(result.analyzerResult.objDetectionBoxes?.map {
+                    it.forDebugObjDetect(frame.cardFinder, frame.previewSize) })
             }
 
             // always show up to date number and name
@@ -621,12 +634,10 @@ class CardScanActivity : ScanActivity<SSDOcr.Input, PaymentCardOcrState, Payment
                 cardNameTextView.visibility = View.VISIBLE
                 fadeIn(cardNameTextView, 0.seconds)
             }
-
         }
     }.let { Unit }
 
     override suspend fun onReset() = launch(Dispatchers.Main) { setStateNotFound() }.let { Unit }
 
     override fun getLayoutRes(): Int = R.layout.bouncer_activity_card_scan
-
 }
