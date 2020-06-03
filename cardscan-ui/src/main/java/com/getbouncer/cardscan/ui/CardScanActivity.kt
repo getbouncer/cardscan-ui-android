@@ -1,5 +1,6 @@
 package com.getbouncer.cardscan.ui
 
+import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
@@ -26,11 +27,13 @@ import com.getbouncer.scan.framework.crop
 import com.getbouncer.scan.framework.size
 import com.getbouncer.scan.framework.time.Clock
 import com.getbouncer.scan.framework.time.seconds
+import com.getbouncer.scan.framework.util.memoizeSuspend
 import com.getbouncer.scan.payment.analyzer.NameDetectAnalyzer
 import com.getbouncer.scan.payment.analyzer.PaymentCardOcrAnalyzer
 import com.getbouncer.scan.payment.analyzer.PaymentCardOcrState
 import com.getbouncer.scan.payment.card.formatPan
 import com.getbouncer.scan.payment.card.getCardIssuer
+import com.getbouncer.scan.payment.card.isPossiblyValidPan
 import com.getbouncer.scan.payment.ml.AlphabetDetect
 import com.getbouncer.scan.payment.ml.SSDObjectDetect
 import com.getbouncer.scan.payment.ml.SSDOcr
@@ -63,9 +66,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.supervisorScope
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 private const val REQUEST_CODE = 21521 // "bou"
@@ -129,7 +129,6 @@ class CardScanActivity : ScanActivity<SSDOcr.Input, PaymentCardOcrState, Payment
 
     companion object {
         private const val PARAM_ENABLE_ENTER_MANUALLY = "enableEnterManually"
-        private const val PARAM_ENABLE_NAME_EXTRACTION = "enableNameExtraction"
         private const val PARAM_DISPLAY_CARD_PAN = "displayCardPan"
         private const val PARAM_DISPLAY_CARD_SCAN_LOGO = "displayCardScanLogo"
         private const val PARAM_DISPLAY_CARDHOLDER_NAME = "displayCardholderName"
@@ -147,11 +146,10 @@ class CardScanActivity : ScanActivity<SSDOcr.Input, PaymentCardOcrState, Payment
         @JvmStatic
         fun warmUp(context: Context, apiKey: String, enableNameExtraction: Boolean) {
             Config.apiKey = apiKey
+            Companion.enableNameExtraction = enableNameExtraction
 
             GlobalScope.launch(Dispatchers.IO) {
-                supervisorScope {
-                    analyzerPool = getAnalyzerPool(context, enableNameExtraction)
-                }
+                getAnalyzerPool(context)
             }
         }
 
@@ -162,6 +160,7 @@ class CardScanActivity : ScanActivity<SSDOcr.Input, PaymentCardOcrState, Payment
          * @param apiKey: The bouncer API key used to run scanning.
          * @param enableEnterCardManually: If true, show a button to enter the card manually.
          * @param displayCardPan: If true, display the card pan once the card has started to scan.
+         * @param displayCardholderName: If true, display the name of the card owner if extracted.
          * @param displayCardScanLogo: If true, display the cardscan.io logo at the top of the
          *     screen.
          * @param enableDebug: If true, enable debug views in card scan.
@@ -172,7 +171,6 @@ class CardScanActivity : ScanActivity<SSDOcr.Input, PaymentCardOcrState, Payment
             activity: Activity,
             apiKey: String,
             enableEnterCardManually: Boolean = false,
-            enableNameExtraction: Boolean = false,
             displayCardPan: Boolean = false,
             displayCardholderName: Boolean = false,
             displayCardScanLogo: Boolean = true,
@@ -183,7 +181,6 @@ class CardScanActivity : ScanActivity<SSDOcr.Input, PaymentCardOcrState, Payment
                     context = activity,
                     apiKey = apiKey,
                     enableEnterCardManually = enableEnterCardManually,
-                    enableNameExtraction = enableNameExtraction,
                     displayCardPan = displayCardPan,
                     displayCardholderName = displayCardholderName,
                     displayCardScanLogo = displayCardScanLogo,
@@ -199,6 +196,7 @@ class CardScanActivity : ScanActivity<SSDOcr.Input, PaymentCardOcrState, Payment
          * @param apiKey: The bouncer API key used to run scanning.
          * @param enableEnterCardManually: If true, show a button to enter the card manually.
          * @param displayCardPan: If true, display the card pan once the card has started to scan.
+         * @param displayCardholderName: If true, display the name of the card owner if extracted.
          * @param displayCardScanLogo: If true, display the cardscan.io logo at the top of the
          *     screen.
          * @param enableDebug: If true, enable debug views in card scan.
@@ -210,6 +208,7 @@ class CardScanActivity : ScanActivity<SSDOcr.Input, PaymentCardOcrState, Payment
             apiKey: String,
             enableEnterCardManually: Boolean = false,
             displayCardPan: Boolean = false,
+            displayCardholderName: Boolean = false,
             displayCardScanLogo: Boolean = true,
             enableDebug: Boolean = Config.isDebug
         ) {
@@ -220,6 +219,7 @@ class CardScanActivity : ScanActivity<SSDOcr.Input, PaymentCardOcrState, Payment
                     apiKey = apiKey,
                     enableEnterCardManually = enableEnterCardManually,
                     displayCardPan = displayCardPan,
+                    displayCardholderName = displayCardholderName,
                     displayCardScanLogo = displayCardScanLogo,
                     enableDebug = enableDebug
                 ), REQUEST_CODE
@@ -233,6 +233,7 @@ class CardScanActivity : ScanActivity<SSDOcr.Input, PaymentCardOcrState, Payment
          * @param apiKey: The bouncer API key used to run scanning.
          * @param enableEnterCardManually: If true, show a button to enter the card manually.
          * @param displayCardPan: If true, display the card pan once the card has started to scan.
+         * @param displayCardholderName: If true, display the name of the card owner if extracted.
          * @param displayCardScanLogo: If true, display the cardscan.io logo at the top of the
          *     screen.
          * @param enableDebug: If true, enable debug views in card scan.
@@ -243,7 +244,6 @@ class CardScanActivity : ScanActivity<SSDOcr.Input, PaymentCardOcrState, Payment
             context: Context,
             apiKey: String,
             enableEnterCardManually: Boolean = false,
-            enableNameExtraction: Boolean = false,
             displayCardPan: Boolean = false,
             displayCardholderName: Boolean = false,
             displayCardScanLogo: Boolean = true,
@@ -255,7 +255,6 @@ class CardScanActivity : ScanActivity<SSDOcr.Input, PaymentCardOcrState, Payment
             return Intent(context, CardScanActivity::class.java)
                 .putExtra(PARAM_DISPLAY_CARD_SCAN_LOGO, displayCardScanLogo)
                 .putExtra(PARAM_ENABLE_ENTER_MANUALLY, enableEnterCardManually)
-                .putExtra(PARAM_ENABLE_NAME_EXTRACTION, enableNameExtraction)
                 .putExtra(PARAM_DISPLAY_CARD_PAN, displayCardPan)
                 .putExtra(PARAM_DISPLAY_CARDHOLDER_NAME, displayCardholderName)
         }
@@ -291,44 +290,31 @@ class CardScanActivity : ScanActivity<SSDOcr.Input, PaymentCardOcrState, Payment
         @JvmStatic
         fun isScanResult(requestCode: Int) = REQUEST_CODE == requestCode
 
-        private val analyzerPoolMutex = Mutex()
-        private var analyzerPool: AnalyzerPool<SSDOcr.Input, PaymentCardOcrState, PaymentCardOcrAnalyzer.Prediction>? =
-            null
-
-        private suspend fun getAnalyzerPool(context: Context, enableNameExtraction: Boolean):
-                AnalyzerPool<SSDOcr.Input, PaymentCardOcrState, PaymentCardOcrAnalyzer.Prediction> =
-            analyzerPoolMutex.withLock {
-                var analyzerPool = analyzerPool
-                if (analyzerPool == null) {
-                    val nameDetectAnalyzer = if (enableNameExtraction) {
-                        NameDetectAnalyzer.Factory(
-                            SSDObjectDetect.Factory(
-                                context,
-                                SSDObjectDetect.ModelLoader(context)
-                            ),
-                            AlphabetDetect.Factory(context, AlphabetDetect.ModelLoader(context))
-                        )
-                    } else {
-                        null
-                    }
-                    analyzerPool = AnalyzerPool.Factory(
-                        PaymentCardOcrAnalyzer.Factory(
-                            SSDOcr.Factory(context, SSDOcr.ModelLoader(context)),
-                            nameDetectAnalyzer
-                        )
-                    ).buildAnalyzerPool()
-                    Companion.analyzerPool = analyzerPool
-                }
-                analyzerPool
+        private var enableNameExtraction: Boolean = false
+        private val getAnalyzerPool = memoizeSuspend { context: Context ->
+            val nameDetectAnalyzer = if (enableNameExtraction) {
+                NameDetectAnalyzer.Factory(
+                    SSDObjectDetect.Factory(
+                        context,
+                        SSDObjectDetect.ModelLoader(context)
+                    ),
+                    AlphabetDetect.Factory(context, AlphabetDetect.ModelLoader(context))
+                )
+            } else {
+                null
             }
+
+            AnalyzerPool.Factory(
+                PaymentCardOcrAnalyzer.Factory(
+                    SSDOcr.Factory(context, SSDOcr.ModelLoader(context)),
+                    nameDetectAnalyzer
+                )
+            ).buildAnalyzerPool()
+        }
     }
 
     private val enableEnterCardManually: Boolean by lazy {
         intent.getBooleanExtra(PARAM_ENABLE_ENTER_MANUALLY, false)
-    }
-
-    private val enableNameExtraction: Boolean by lazy {
-        intent.getBooleanExtra(PARAM_ENABLE_NAME_EXTRACTION, false)
     }
 
     private val displayCardPan: Boolean by lazy {
@@ -363,6 +349,7 @@ class CardScanActivity : ScanActivity<SSDOcr.Input, PaymentCardOcrState, Payment
     /**
      * During on create
      */
+    @SuppressLint("ClickableViewAccessibility")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -484,7 +471,7 @@ class CardScanActivity : ScanActivity<SSDOcr.Input, PaymentCardOcrState, Payment
         resultAggregator: ResultAggregator<SSDOcr.Input, PaymentCardOcrState, PaymentCardOcrAnalyzer.Prediction, OcrResultAggregator.InterimResult, PaymentCardOcrResult>
     ): ProcessBoundAnalyzerLoop<SSDOcr.Input, PaymentCardOcrState, PaymentCardOcrAnalyzer.Prediction> =
         ProcessBoundAnalyzerLoop(
-            analyzerPool = runBlocking { getAnalyzerPool(this@CardScanActivity, enableNameExtraction) },
+            analyzerPool = runBlocking { getAnalyzerPool(this@CardScanActivity) },
             resultHandler = resultAggregator,
             initialState = PaymentCardOcrState(true, false),
             name = "main_loop",
@@ -577,7 +564,7 @@ class CardScanActivity : ScanActivity<SSDOcr.Input, PaymentCardOcrState, Payment
         val hasPreviousValidResult = hasPreviousValidResult.getAndSet(result.hasValidPan)
         val isFirstValidResult = result.hasValidPan && !hasPreviousValidResult
 
-        val pan = result.analyzerResult.pan
+        val pan = result.mostLikelyPan
 
         if (isFirstValidResult) {
             scanStat.trackResult("ocr_pan_observed")
@@ -594,7 +581,7 @@ class CardScanActivity : ScanActivity<SSDOcr.Input, PaymentCardOcrState, Payment
             fadeIn(cardNameTextView)
         }
 
-        if (pan != null && pan.length >= 5) {
+        if (pan != null && isPossiblyValidPan(pan)) {
             if (enableNameExtraction && result.analyzerResult.isNameExtractionAvailable) {
                 setStateFoundLong()
             } else {
