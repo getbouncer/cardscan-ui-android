@@ -1,5 +1,6 @@
 package com.getbouncer.cardscan.ui
 
+import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
@@ -27,10 +28,13 @@ import com.getbouncer.scan.framework.size
 import com.getbouncer.scan.framework.time.Clock
 import com.getbouncer.scan.framework.time.seconds
 import com.getbouncer.scan.framework.util.memoizeSuspend
+<<<<<<< HEAD
 
 import com.getbouncer.scan.payment.analyzer.NameDetectAnalyzer
 import com.getbouncer.scan.payment.analyzer.PaymentCardOcrAnalyzer
 import com.getbouncer.scan.payment.analyzer.PaymentCardOcrState
+=======
+>>>>>>> Add memoization functions
 import com.getbouncer.scan.payment.card.formatPan
 import com.getbouncer.scan.payment.card.getCardIssuer
 import com.getbouncer.scan.payment.ml.AlphabetDetect
@@ -65,6 +69,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+<<<<<<< HEAD
+=======
+import kotlinx.coroutines.supervisorScope
+>>>>>>> Add memoization functions
 import kotlinx.coroutines.withContext
 
 private const val REQUEST_CODE = 21521 // "bou"
@@ -288,7 +296,7 @@ class CardScanActivity : ScanActivity<SSDOcr.Input, PaymentCardOcrState, Payment
         @JvmStatic
         fun isScanResult(requestCode: Int) = REQUEST_CODE == requestCode
 
-        private val getAnalyzerPool = memoizeSuspend { context: Context ->
+        private val getAnalyzerPool = memoizeSuspend { context: Context, enableNameExtraction: Boolean ->
             val nameDetectAnalyzer = if (enableNameExtraction) {
                 NameDetectAnalyzer.Factory(
                     SSDObjectDetect.Factory(
@@ -350,6 +358,7 @@ class CardScanActivity : ScanActivity<SSDOcr.Input, PaymentCardOcrState, Payment
     /**
      * During on create
      */
+    @SuppressLint("ClickableViewAccessibility")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
