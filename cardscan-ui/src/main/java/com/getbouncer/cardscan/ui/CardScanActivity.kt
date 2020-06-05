@@ -134,6 +134,7 @@ class CardScanActivity :
         private const val PARAM_DISPLAY_CARD_PAN = "displayCardPan"
         private const val PARAM_DISPLAY_CARD_SCAN_LOGO = "displayCardScanLogo"
         private const val PARAM_DISPLAY_CARDHOLDER_NAME = "displayCardholderName"
+        private const val PARAM_ENABLE_NAME_EXTRACTION = "enableNameExtraction"
 
         private const val CANCELED_REASON_ENTER_MANUALLY = 3
 
@@ -149,7 +150,6 @@ class CardScanActivity :
         @JvmOverloads
         fun warmUp(context: Context, apiKey: String, enableNameExtraction: Boolean = false) {
             Config.apiKey = apiKey
-            Companion.enableNameExtraction = enableNameExtraction
 
             GlobalScope.launch(Dispatchers.Default) {
                 getAnalyzerPool(context, enableNameExtraction)
@@ -162,6 +162,7 @@ class CardScanActivity :
          * @param activity: The activity launching card scan.
          * @param apiKey: The bouncer API key used to run scanning.
          * @param enableEnterCardManually: If true, show a button to enter the card manually.
+         * @param enableNameExtraction: If true, attempt to extract the cardholder name.
          * @param displayCardPan: If true, display the card pan once the card has started to scan.
          * @param displayCardholderName: If true, display the name of the card owner if extracted.
          * @param displayCardScanLogo: If true, display the cardscan.io logo at the top of the
@@ -174,6 +175,7 @@ class CardScanActivity :
             activity: Activity,
             apiKey: String,
             enableEnterCardManually: Boolean = false,
+            enableNameExtraction: Boolean = false,
             displayCardPan: Boolean = false,
             displayCardholderName: Boolean = false,
             displayCardScanLogo: Boolean = true,
@@ -184,6 +186,7 @@ class CardScanActivity :
                     context = activity,
                     apiKey = apiKey,
                     enableEnterCardManually = enableEnterCardManually,
+                    enableNameExtraction = enableNameExtraction,
                     displayCardPan = displayCardPan,
                     displayCardholderName = displayCardholderName,
                     displayCardScanLogo = displayCardScanLogo,
@@ -199,6 +202,7 @@ class CardScanActivity :
          * @param fragment: The fragment launching card scan.
          * @param apiKey: The bouncer API key used to run scanning.
          * @param enableEnterCardManually: If true, show a button to enter the card manually.
+         * @param enableNameExtraction: If true, attempt to extract the cardholder name.
          * @param displayCardPan: If true, display the card pan once the card has started to scan.
          * @param displayCardholderName: If true, display the name of the card owner if extracted.
          * @param displayCardScanLogo: If true, display the cardscan.io logo at the top of the
@@ -211,6 +215,7 @@ class CardScanActivity :
             fragment: Fragment,
             apiKey: String,
             enableEnterCardManually: Boolean = false,
+            enableNameExtraction: Boolean = false,
             displayCardPan: Boolean = false,
             displayCardholderName: Boolean = false,
             displayCardScanLogo: Boolean = true,
@@ -222,6 +227,7 @@ class CardScanActivity :
                     context = context,
                     apiKey = apiKey,
                     enableEnterCardManually = enableEnterCardManually,
+                    enableNameExtraction = enableNameExtraction,
                     displayCardPan = displayCardPan,
                     displayCardholderName = displayCardholderName,
                     displayCardScanLogo = displayCardScanLogo,
@@ -237,6 +243,7 @@ class CardScanActivity :
          * @param context: The activity used to build the intent.
          * @param apiKey: The bouncer API key used to run scanning.
          * @param enableEnterCardManually: If true, show a button to enter the card manually.
+         * @param enableNameExtraction: If true, attempt to extract the cardholder name.
          * @param displayCardPan: If true, display the card pan once the card has started to scan.
          * @param displayCardholderName: If true, display the name of the card owner if extracted.
          * @param displayCardScanLogo: If true, display the cardscan.io logo at the top of the
@@ -249,6 +256,7 @@ class CardScanActivity :
             context: Context,
             apiKey: String,
             enableEnterCardManually: Boolean = false,
+            enableNameExtraction: Boolean = false,
             displayCardPan: Boolean = false,
             displayCardholderName: Boolean = false,
             displayCardScanLogo: Boolean = true,
@@ -260,6 +268,7 @@ class CardScanActivity :
             return Intent(context, CardScanActivity::class.java)
                 .putExtra(PARAM_DISPLAY_CARD_SCAN_LOGO, displayCardScanLogo)
                 .putExtra(PARAM_ENABLE_ENTER_MANUALLY, enableEnterCardManually)
+                .putExtra(PARAM_ENABLE_NAME_EXTRACTION, enableNameExtraction)
                 .putExtra(PARAM_DISPLAY_CARD_PAN, displayCardPan)
                 .putExtra(PARAM_DISPLAY_CARDHOLDER_NAME, displayCardholderName)
         }
@@ -295,9 +304,8 @@ class CardScanActivity :
         @JvmStatic
         fun isScanResult(requestCode: Int) = REQUEST_CODE == requestCode
 
-        private var enableNameExtraction: Boolean = false
-        private val getAnalyzerPool = memoizeSuspend { context: Context, enableNameExtraction: Boolean ->
-            val nameDetectAnalyzer = if (enableNameExtraction) {
+        private val getAnalyzerPool = memoizeSuspend { context: Context, enableEnterCardManually: Boolean ->
+            val nameDetect = if (enableEnterCardManually) {
                 NameDetectAnalyzer.Factory(
                     SSDObjectDetect.Factory(
                         context,
@@ -312,7 +320,7 @@ class CardScanActivity :
             AnalyzerPool.Factory(
                 PaymentCardOcrAnalyzer.Factory(
                     SSDOcr.Factory(context, SSDOcr.ModelLoader(context)),
-                    nameDetectAnalyzer
+                    nameDetect
                 )
             ).buildAnalyzerPool()
         }
@@ -332,6 +340,10 @@ class CardScanActivity :
 
     private val displayCardScanLogo: Boolean by lazy {
         intent.getBooleanExtra(PARAM_DISPLAY_CARD_SCAN_LOGO, true)
+    }
+
+    private val enableNameExtraction: Boolean by lazy {
+        intent.getBooleanExtra(PARAM_ENABLE_NAME_EXTRACTION, true)
     }
 
     private var mainLoopIsProducingResults = AtomicBoolean(false)
