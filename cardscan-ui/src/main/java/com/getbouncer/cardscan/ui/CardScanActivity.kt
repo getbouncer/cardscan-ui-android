@@ -17,7 +17,7 @@ import androidx.fragment.app.Fragment
 import com.getbouncer.cardscan.ui.result.OcrResultAggregator
 import com.getbouncer.cardscan.ui.result.PaymentCardOcrResult
 import com.getbouncer.scan.framework.AggregateResultListener
-import com.getbouncer.scan.framework.AnalyzerPool
+import com.getbouncer.scan.framework.AnalyzerPoolFactory
 import com.getbouncer.scan.framework.Config
 import com.getbouncer.scan.framework.ProcessBoundAnalyzerLoop
 import com.getbouncer.scan.framework.ResultAggregator
@@ -317,7 +317,7 @@ class CardScanActivity :
                 null
             }
 
-            AnalyzerPool.Factory(
+            AnalyzerPoolFactory(
                 PaymentCardOcrAnalyzer.Factory(
                     SSDOcr.Factory(context, SSDOcr.ModelLoader(context)),
                     nameDetect
