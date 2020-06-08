@@ -1,5 +1,21 @@
 # Changelog
 
+## [2.0.0011](https://github.com/getbouncer/cardscan-ui-android/tree/2.0.0011) (2020-06-08)
+
+[Full Changelog](https://github.com/getbouncer/cardscan-ui-android/compare/2.0.0009...2.0.0011)
+
+**Merged pull requests:**
+
+- Support java interoperability [\#25](https://github.com/getbouncer/cardscan-ui-android/pull/25) ([awushensky](https://github.com/awushensky))
+- Enable disabling name extraction on start [\#24](https://github.com/getbouncer/cardscan-ui-android/pull/24) ([awushensky](https://github.com/awushensky))
+- Update scan payments submodule [\#23](https://github.com/getbouncer/cardscan-ui-android/pull/23) ([xsl](https://github.com/xsl))
+- Use default dispatchers [\#22](https://github.com/getbouncer/cardscan-ui-android/pull/22) ([awushensky](https://github.com/awushensky))
+- Reduce settings for name extractor [\#21](https://github.com/getbouncer/cardscan-ui-android/pull/21) ([awushensky](https://github.com/awushensky))
+- Bump ktlint from 0.36.0 to 0.37.0 [\#20](https://github.com/getbouncer/cardscan-ui-android/pull/20) ([dependabot-preview[bot]](https://github.com/apps/dependabot-preview))
+- Update image utils [\#19](https://github.com/getbouncer/cardscan-ui-android/pull/19) ([awushensky](https://github.com/awushensky))
+- Name extraction v1 w/ old object detector [\#18](https://github.com/getbouncer/cardscan-ui-android/pull/18) ([xsl](https://github.com/xsl))
+- Bump gradle from 3.6.3 to 4.0.0 [\#17](https://github.com/getbouncer/cardscan-ui-android/pull/17) ([dependabot-preview[bot]](https://github.com/apps/dependabot-preview))
+
 ## [2.0.0009](https://github.com/getbouncer/cardscan-ui-android/tree/2.0.0009) (2020-05-29)
 
 [Full Changelog](https://github.com/getbouncer/cardscan-ui-android/compare/2.0.0008...2.0.0009)
