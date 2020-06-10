@@ -5,7 +5,7 @@ import android.graphics.Rect
 import android.util.Size
 import androidx.annotation.RestrictTo
 import com.getbouncer.scan.camera.FrameConverter
-import com.getbouncer.scan.framework.rotate
+import com.getbouncer.scan.camera.rotate
 import com.getbouncer.scan.payment.ml.SSDOcr
 
 @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
