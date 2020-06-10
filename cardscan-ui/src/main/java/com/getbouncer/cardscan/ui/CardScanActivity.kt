@@ -23,8 +23,6 @@ import com.getbouncer.scan.framework.ProcessBoundAnalyzerLoop
 import com.getbouncer.scan.framework.ResultAggregator
 import com.getbouncer.scan.framework.ResultAggregatorConfig
 import com.getbouncer.scan.framework.SavedFrame
-import com.getbouncer.scan.framework.crop
-import com.getbouncer.scan.framework.size
 import com.getbouncer.scan.framework.time.Clock
 import com.getbouncer.scan.framework.time.seconds
 import com.getbouncer.scan.framework.util.memoizeSuspend
@@ -482,7 +480,10 @@ class CardScanActivity :
         ProcessBoundAnalyzerLoop(
             analyzerPool = runBlocking { getAnalyzerPool(this@CardScanActivity, enableNameExtraction) },
             resultHandler = resultAggregator,
-            initialState = PaymentCardOcrState(true, false),
+            initialState = PaymentCardOcrState(
+                runOcr = true,
+                runNameExtraction = false
+            ),
             name = "main_loop",
             onAnalyzerFailure = {
                 analyzerFailureCancelScan(it)
@@ -600,15 +601,7 @@ class CardScanActivity :
 
         if (Config.isDebug && lastDebugFrameUpdate.elapsedSince() > 1.seconds) {
             lastDebugFrameUpdate = Clock.markNow()
-            val bitmap = withContext(Dispatchers.Default) {
-                frame.fullImage.crop(
-                    SSDOcr.calculateCrop(
-                        frame.fullImage.size(),
-                        frame.previewSize,
-                        frame.cardFinder
-                    )
-                )
-            }
+            val bitmap = withContext(Dispatchers.Default) { SSDOcr.cropImage(frame) }
             debugBitmapView.setImageBitmap(bitmap)
             if (result.analyzerResult.panDetectionBoxes != null) {
                 debugOverlayView.setBoxes(result.analyzerResult.panDetectionBoxes?.map { it.forDebugPan() })
