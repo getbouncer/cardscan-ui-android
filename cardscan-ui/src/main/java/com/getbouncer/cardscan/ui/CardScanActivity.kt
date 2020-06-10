@@ -349,8 +349,12 @@ class CardScanActivity :
     private val hasPreviousValidResult = AtomicBoolean(false)
     private var lastDebugFrameUpdate = Clock.markNow()
 
-    private lateinit var resultAggregator:
-            ResultAggregator<SSDOcr.Input, PaymentCardOcrState, PaymentCardOcrAnalyzer.Prediction, OcrResultAggregator.InterimResult, PaymentCardOcrResult>
+    private lateinit var resultAggregator: ResultAggregator<
+        SSDOcr.Input,
+        PaymentCardOcrState,
+        PaymentCardOcrAnalyzer.Prediction,
+        OcrResultAggregator.InterimResult,
+        PaymentCardOcrResult>
 
     private val viewFinderRect by lazy {
         Rect(
