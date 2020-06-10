@@ -61,6 +61,7 @@ import kotlinx.android.synthetic.main.bouncer_activity_card_scan.viewFinderBorde
 import kotlinx.android.synthetic.main.bouncer_activity_card_scan.viewFinderWindow
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
@@ -124,7 +125,7 @@ data class CardScanActivityResult(
 ) : Parcelable
 
 class CardScanActivity :
-    ScanActivity<SSDOcr.Input, PaymentCardOcrState, PaymentCardOcrAnalyzer.Prediction, OcrResultAggregator.InterimResult, PaymentCardOcrResult>(),
+    ScanActivity<SSDOcr.Input>(),
     AggregateResultListener<SSDOcr.Input, PaymentCardOcrState, OcrResultAggregator.InterimResult, PaymentCardOcrResult> {
 
     companion object {
@@ -348,6 +349,13 @@ class CardScanActivity :
     private val hasPreviousValidResult = AtomicBoolean(false)
     private var lastDebugFrameUpdate = Clock.markNow()
 
+    private lateinit var resultAggregator: ResultAggregator<
+        SSDOcr.Input,
+        PaymentCardOcrState,
+        PaymentCardOcrAnalyzer.Prediction,
+        OcrResultAggregator.InterimResult,
+        PaymentCardOcrResult>
+
     private val viewFinderRect by lazy {
         Rect(
             viewFinderWindow.left,
@@ -394,15 +402,25 @@ class CardScanActivity :
         updateIcons()
     }
 
-    override fun onResume() {
-        super.onResume()
-        setStateNotFound()
-        viewFinderBackground.setOnDrawListener { updateIcons() }
+    override fun onInvalidApiKey() {
+        resultAggregator.resetAndPause()
     }
 
     override fun onPause() {
         super.onPause()
         viewFinderBackground.clearOnDrawListener()
+        if (::resultAggregator.isInitialized) {
+            resultAggregator.resetAndPause()
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        setStateNotFound()
+        viewFinderBackground.setOnDrawListener { updateIcons() }
+        if (isApiKeyValid && ::resultAggregator.isInitialized) {
+            resultAggregator.resume()
+        }
     }
 
     private fun updateIcons() {
@@ -462,38 +480,6 @@ class CardScanActivity :
         previewSize = Size(previewFrame.width, previewFrame.height),
         cardFinder = viewFinderRect
     )
-
-    override fun buildResultAggregator() = OcrResultAggregator(
-        config = ResultAggregatorConfig.Builder()
-            .withMaxTotalAggregationTime(if (enableNameExtraction) 15.seconds else 2.seconds)
-            .withDefaultMaxSavedFrames(0)
-            .build(),
-        listener = this,
-        name = "main_loop",
-        requiredAgreementCount = 5,
-        isNameExtractionEnabled = enableNameExtraction
-    )
-
-    override fun buildMainLoop(
-        resultAggregator: ResultAggregator<SSDOcr.Input, PaymentCardOcrState, PaymentCardOcrAnalyzer.Prediction, OcrResultAggregator.InterimResult, PaymentCardOcrResult>
-    ): ProcessBoundAnalyzerLoop<SSDOcr.Input, PaymentCardOcrState, PaymentCardOcrAnalyzer.Prediction> =
-        ProcessBoundAnalyzerLoop(
-            analyzerPool = runBlocking { getAnalyzerPool(this@CardScanActivity, enableNameExtraction) },
-            resultHandler = resultAggregator,
-            initialState = PaymentCardOcrState(
-                runOcr = true,
-                runNameExtraction = false
-            ),
-            name = "main_loop",
-            onAnalyzerFailure = {
-                analyzerFailureCancelScan(it)
-                true // terminate the loop on any analyzer failures
-            },
-            onResultFailure = {
-                analyzerFailureCancelScan(it)
-                true // terminate the loop on any result failures
-            }
-        )
 
     private var scanState = State.NOT_FOUND
     private fun setStateNotFound() {
@@ -631,4 +617,42 @@ class CardScanActivity :
     override suspend fun onReset() = launch(Dispatchers.Main) { setStateNotFound() }.let { Unit }
 
     override fun getLayoutRes(): Int = R.layout.bouncer_activity_card_scan
+
+    /**
+     * Once the camera stream is available, start processing images.
+     */
+    override fun onCameraStreamAvailable(cameraStream: Channel<SSDOcr.Input>) {
+        resultAggregator = OcrResultAggregator(
+            config = ResultAggregatorConfig.Builder()
+                .withMaxTotalAggregationTime(if (enableNameExtraction) 15.seconds else 2.seconds)
+                .withDefaultMaxSavedFrames(0)
+                .build(),
+            listener = this,
+            name = "main_loop",
+            requiredAgreementCount = 5,
+            isNameExtractionEnabled = enableNameExtraction
+        )
+
+        val mainLoop = ProcessBoundAnalyzerLoop(
+            analyzerPool = runBlocking { getAnalyzerPool(this@CardScanActivity, enableNameExtraction) },
+            resultHandler = resultAggregator,
+            initialState = PaymentCardOcrState(
+                runOcr = true,
+                runNameExtraction = false
+            ),
+            name = "main_loop",
+            onAnalyzerFailure = {
+                analyzerFailureCancelScan(it)
+                true // terminate the loop on any analyzer failures
+            },
+            onResultFailure = {
+                analyzerFailureCancelScan(it)
+                true // terminate the loop on any result failures
+            }
+        )
+
+        launch(Dispatchers.Default) {
+            mainLoop.subscribeTo(cameraStream, this)
+        }
+    }
 }
