@@ -534,7 +534,7 @@ class CardScanActivity :
         panBoxes: List<DetectionBox>?,
         objectBoxes: List<DetectionBox>?
     ) {
-        if (Config.isDebug) {// && lastDebugFrameUpdate.elapsedSince() > 1.seconds) {
+        if (Config.isDebug && lastDebugFrameUpdate.elapsedSince() > 1.seconds) {
             lastDebugFrameUpdate = Clock.markNow()
             val bitmap = withContext(Dispatchers.Default) { SSDOcr.cropImage(frame) }
             debugBitmapView.setImageBitmap(bitmap)
