@@ -615,13 +615,13 @@ class CardScanActivity :
                 .withMaxTotalAggregationTime(if (enableNameExtraction) 15.seconds else 2.seconds)
                 .withDefaultMaxSavedFrames(0)
                 .build(),
-            listener = this@CardScanActivity,
+            listener = this,
             requiredAgreementCount = 5,
             isNameExtractionEnabled = enableNameExtraction
         )
 
         // make this result aggregator pause and reset when the lifecycle pauses.
-        mainLoopResultAggregator.bindToLifecycle(this@CardScanActivity)
+        mainLoopResultAggregator.bindToLifecycle(this)
 
         val mainLoop = ProcessBoundAnalyzerLoop(
             analyzerPool = runBlocking { getAnalyzerPool(this@CardScanActivity, enableNameExtraction) },
