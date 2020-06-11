@@ -20,7 +20,6 @@ import com.getbouncer.scan.framework.AggregateResultListener
 import com.getbouncer.scan.framework.AnalyzerPoolFactory
 import com.getbouncer.scan.framework.Config
 import com.getbouncer.scan.framework.ProcessBoundAnalyzerLoop
-import com.getbouncer.scan.framework.ResultAggregator
 import com.getbouncer.scan.framework.ResultAggregatorConfig
 import com.getbouncer.scan.framework.SavedFrame
 import com.getbouncer.scan.framework.time.Clock
@@ -71,7 +70,7 @@ private const val REQUEST_CODE = 21521 // "bou"
 
 private val MINIMUM_RESOLUTION = Size(1280, 720) // minimum size of an object square
 
-enum class State(val value: Int) {
+private enum class State(val value: Int) {
     NOT_FOUND(0),
     FOUND(1);
 }
@@ -303,8 +302,8 @@ class CardScanActivity :
         @JvmStatic
         fun isScanResult(requestCode: Int) = REQUEST_CODE == requestCode
 
-        private val getAnalyzerPool = memoizeSuspend { context: Context, enableEnterCardManually: Boolean ->
-            val nameDetect = if (enableEnterCardManually) {
+        private val getAnalyzerPool = memoizeSuspend { context: Context, enableNameExtraction: Boolean ->
+            val nameDetect = if (enableNameExtraction) {
                 NameDetectAnalyzer.Factory(
                     SSDObjectDetect.Factory(
                         context,
@@ -349,12 +348,7 @@ class CardScanActivity :
     private val hasPreviousValidResult = AtomicBoolean(false)
     private var lastDebugFrameUpdate = Clock.markNow()
 
-    private lateinit var resultAggregator: ResultAggregator<
-        SSDOcr.Input,
-        PaymentCardOcrState,
-        PaymentCardOcrAnalyzer.Prediction,
-        OcrResultAggregator.InterimResult,
-        PaymentCardOcrResult>
+    private lateinit var mainLoopAggregator: OcrResultAggregator
 
     private val viewFinderRect by lazy {
         Rect(
@@ -402,25 +396,15 @@ class CardScanActivity :
         updateIcons()
     }
 
-    override fun onInvalidApiKey() {
-        resultAggregator.resetAndPause()
-    }
-
     override fun onPause() {
         super.onPause()
         viewFinderBackground.clearOnDrawListener()
-        if (::resultAggregator.isInitialized) {
-            resultAggregator.resetAndPause()
-        }
     }
 
     override fun onResume() {
         super.onResume()
         setStateNotFound()
         viewFinderBackground.setOnDrawListener { updateIcons() }
-        if (isApiKeyValid && ::resultAggregator.isInitialized) {
-            resultAggregator.resume()
-        }
     }
 
     private fun updateIcons() {
@@ -545,6 +529,24 @@ class CardScanActivity :
         )
     }.let { Unit }
 
+    private suspend fun showDebugFrame(
+        frame: SSDOcr.Input,
+        panBoxes: List<DetectionBox>?,
+        objectBoxes: List<DetectionBox>?
+    ) {
+        if (Config.isDebug) {// && lastDebugFrameUpdate.elapsedSince() > 1.seconds) {
+            lastDebugFrameUpdate = Clock.markNow()
+            val bitmap = withContext(Dispatchers.Default) { SSDOcr.cropImage(frame) }
+            debugBitmapView.setImageBitmap(bitmap)
+            if (panBoxes != null) {
+                debugOverlayView.setBoxes(panBoxes.map { it.forDebugPan() })
+            }
+            if (objectBoxes != null) {
+                debugOverlayView.setBoxes(objectBoxes.map { it.forDebugObjDetect(frame.cardFinder, frame.previewSize) })
+            }
+        }
+    }
+
     /**
      * An interim result was received from the result aggregator.
      */
@@ -585,33 +587,19 @@ class CardScanActivity :
             }
         }
 
-        if (Config.isDebug && lastDebugFrameUpdate.elapsedSince() > 1.seconds) {
-            lastDebugFrameUpdate = Clock.markNow()
-            val bitmap = withContext(Dispatchers.Default) { SSDOcr.cropImage(frame) }
-            debugBitmapView.setImageBitmap(bitmap)
-            if (result.analyzerResult.panDetectionBoxes != null) {
-                debugOverlayView.setBoxes(result.analyzerResult.panDetectionBoxes?.map { it.forDebugPan() })
-            }
-            if (result.analyzerResult.objDetectionBoxes != null) {
-                debugOverlayView.setBoxes(
-                    result.analyzerResult.objDetectionBoxes?.map {
-                        it.forDebugObjDetect(frame.cardFinder, frame.previewSize)
-                    }
-                )
-            }
-
-            // always show up to date number and name
-            if (pan != null) {
-                cardPanTextView.text = formatPan(pan)
-                fadeIn(cardPanTextView, 0.seconds)
-            }
-
-            if (result.analyzerResult.name != null) {
-                cardNameTextView.text = result.analyzerResult.name
-                cardNameTextView.visibility = View.VISIBLE
-                fadeIn(cardNameTextView, 0.seconds)
-            }
+        // always show up to date number and name
+        if (pan != null) {
+            cardPanTextView.text = formatPan(pan)
+            fadeIn(cardPanTextView, 0.seconds)
         }
+
+        if (result.analyzerResult.name != null) {
+            cardNameTextView.text = result.analyzerResult.name
+            cardNameTextView.visibility = View.VISIBLE
+            fadeIn(cardNameTextView, 0.seconds)
+        }
+
+        showDebugFrame(frame, result.analyzerResult.panDetectionBoxes, result.analyzerResult.objDetectionBoxes)
     }.let { Unit }
 
     override suspend fun onReset() = launch(Dispatchers.Main) { setStateNotFound() }.let { Unit }
@@ -622,20 +610,22 @@ class CardScanActivity :
      * Once the camera stream is available, start processing images.
      */
     override fun onCameraStreamAvailable(cameraStream: Channel<SSDOcr.Input>) {
-        resultAggregator = OcrResultAggregator(
+        val mainLoopResultAggregator = OcrResultAggregator(
             config = ResultAggregatorConfig.Builder()
                 .withMaxTotalAggregationTime(if (enableNameExtraction) 15.seconds else 2.seconds)
                 .withDefaultMaxSavedFrames(0)
                 .build(),
-            listener = this,
-            name = "main_loop",
+            listener = this@CardScanActivity,
             requiredAgreementCount = 5,
             isNameExtractionEnabled = enableNameExtraction
         )
 
+        // make this result aggregator pause and reset when the lifecycle pauses.
+        mainLoopResultAggregator.bindToLifecycle(this@CardScanActivity)
+
         val mainLoop = ProcessBoundAnalyzerLoop(
             analyzerPool = runBlocking { getAnalyzerPool(this@CardScanActivity, enableNameExtraction) },
-            resultHandler = resultAggregator,
+            resultHandler = mainLoopResultAggregator,
             initialState = PaymentCardOcrState(
                 runOcr = true,
                 runNameExtraction = false
@@ -653,6 +643,12 @@ class CardScanActivity :
 
         launch(Dispatchers.Default) {
             mainLoop.subscribeTo(cameraStream, this)
+        }
+    }
+
+    override fun onInvalidApiKey() {
+        if (::mainLoopAggregator.isInitialized) {
+            mainLoopAggregator.cancel()
         }
     }
 }
