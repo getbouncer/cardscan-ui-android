@@ -22,13 +22,11 @@ data class PaymentCardOcrResult(val pan: String?, val name: String?, val expiry:
 class OcrResultAggregator(
     config: ResultAggregatorConfig,
     listener: AggregateResultListener<SSDOcr.Input, PaymentCardOcrState, InterimResult, PaymentCardOcrResult>,
-    name: String,
     private val requiredAgreementCount: Int? = null,
     private val isNameExtractionEnabled: Boolean = false
 ) : ResultAggregator<SSDOcr.Input, PaymentCardOcrState, PaymentCardOcrAnalyzer.Prediction, OcrResultAggregator.InterimResult, PaymentCardOcrResult>(
     config = config,
-    listener = listener,
-    name = name
+    listener = listener
 ) {
 
     data class InterimResult(
@@ -42,6 +40,8 @@ class OcrResultAggregator(
         const val FRAME_TYPE_INVALID_NUMBER = "invalid_number"
         const val NAME_UNAVAILABLE_RESPONSE = "<Insufficient API key permissions>"
     }
+
+    override val name: String = "ocr_result_aggregator"
 
     private val panResults = ResultCounter<String>()
     private val nameResults = ResultCounter<String>()
