@@ -348,7 +348,7 @@ class CardScanActivity :
     private val hasPreviousValidResult = AtomicBoolean(false)
     private var lastDebugFrameUpdate = Clock.markNow()
 
-    private lateinit var mainLoopAggregator: OcrResultAggregator
+    private lateinit var mainLoopResultAggregator: OcrResultAggregator
 
     private val viewFinderRect by lazy {
         Rect(
@@ -610,7 +610,7 @@ class CardScanActivity :
      * Once the camera stream is available, start processing images.
      */
     override fun onCameraStreamAvailable(cameraStream: Channel<SSDOcr.Input>) {
-        val mainLoopResultAggregator = OcrResultAggregator(
+        mainLoopResultAggregator = OcrResultAggregator(
             config = ResultAggregatorConfig.Builder()
                 .withMaxTotalAggregationTime(if (enableNameExtraction) 15.seconds else 2.seconds)
                 .withDefaultMaxSavedFrames(0)
@@ -647,8 +647,8 @@ class CardScanActivity :
     }
 
     override fun onInvalidApiKey() {
-        if (::mainLoopAggregator.isInitialized) {
-            mainLoopAggregator.cancel()
+        if (::mainLoopResultAggregator.isInitialized) {
+            mainLoopResultAggregator.cancel()
         }
     }
 }
