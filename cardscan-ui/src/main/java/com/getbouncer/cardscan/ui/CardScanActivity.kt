@@ -151,7 +151,7 @@ class CardScanActivity :
             Config.apiKey = apiKey
 
             GlobalScope.launch(Dispatchers.Default) {
-                getAnalyzerPool(context.applicationContext, true)
+                getAnalyzerPool(context, true)
             }
         }
 
@@ -303,27 +303,25 @@ class CardScanActivity :
         @JvmStatic
         fun isScanResult(requestCode: Int) = REQUEST_CODE == requestCode
 
-        private val getAnalyzerPool = memoizeSuspend { context: Context, enableNameExtraction: Boolean ->
-            val nameDetect = if (enableNameExtraction) {
-                NameDetectAnalyzer.Factory(
-                    SSDObjectDetect.Factory(
-                        context,
-                        SSDObjectDetect.ModelLoader(context)
-                    ),
-                    AlphabetDetect.Factory(context, AlphabetDetect.ModelLoader(context))
-                )
-            } else {
-                null
-            }
+        private suspend fun getAnalyzerPool(context: Context, enableNameExtraction: Boolean) =
+            memoizeSuspend { ctx: Context, extractNames: Boolean ->
+                val nameDetect = if (extractNames) {
+                    NameDetectAnalyzer.Factory(
+                        SSDObjectDetect.Factory(ctx, SSDObjectDetect.ModelLoader(ctx)),
+                        AlphabetDetect.Factory(ctx, AlphabetDetect.ModelLoader(ctx))
+                    )
+                } else {
+                    null
+                }
 
-            AnalyzerPoolFactory(
-                PaymentCardOcrAnalyzer.Factory(
-                    SSDOcr.Factory(context, SSDOcr.ModelLoader(context)),
-                    nameDetect
-                )
-            ).buildAnalyzerPool()
+                AnalyzerPoolFactory(
+                    PaymentCardOcrAnalyzer.Factory(
+                        SSDOcr.Factory(ctx, SSDOcr.ModelLoader(ctx)),
+                        nameDetect
+                    )
+                ).buildAnalyzerPool()
+            }.invoke(context.applicationContext, enableNameExtraction) // Use the app context to avoid memory leaks.
         }
-    }
 
     private val enableEnterCardManually: Boolean by lazy {
         intent.getBooleanExtra(PARAM_ENABLE_ENTER_MANUALLY, false)
@@ -620,7 +618,7 @@ class CardScanActivity :
         mainLoopResultAggregator.bindToLifecycle(this)
 
         val mainLoop = ProcessBoundAnalyzerLoop(
-            analyzerPool = runBlocking { getAnalyzerPool(this@CardScanActivity.applicationContext, enableNameExtraction) },
+            analyzerPool = runBlocking { getAnalyzerPool(this@CardScanActivity, enableNameExtraction) },
             resultHandler = mainLoopResultAggregator,
             initialState = PaymentCardOcrState(
                 runOcr = true,
