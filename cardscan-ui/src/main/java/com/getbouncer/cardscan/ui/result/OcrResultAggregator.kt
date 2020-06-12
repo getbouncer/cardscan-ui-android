@@ -36,8 +36,6 @@ class OcrResultAggregator(
     )
 
     companion object {
-        const val FRAME_TYPE_VALID_NUMBER = "valid_number"
-        const val FRAME_TYPE_INVALID_NUMBER = "invalid_number"
         const val NAME_UNAVAILABLE_RESPONSE = "<Insufficient API key permissions>"
     }
 
@@ -107,13 +105,10 @@ class OcrResultAggregator(
         }
     }
 
-    // TODO: This should identify the least blurry images and store them in their own identifier
-    override fun getSaveFrameIdentifier(result: InterimResult, frame: SSDOcr.Input): String? =
-        if (result.hasValidPan) {
-            FRAME_TYPE_VALID_NUMBER
-        } else {
-            FRAME_TYPE_INVALID_NUMBER
-        }
+    /**
+     * Do not save frames for cardscan
+     */
+    override fun getSaveFrameIdentifier(result: InterimResult, frame: SSDOcr.Input): String? = null
 
     override fun getFrameSizeBytes(frame: SSDOcr.Input): Int = frame.fullImage.byteCount
 }
