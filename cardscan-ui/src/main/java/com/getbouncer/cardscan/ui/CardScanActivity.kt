@@ -9,6 +9,7 @@ import android.graphics.PointF
 import android.graphics.Rect
 import android.os.Bundle
 import android.os.Parcelable
+import android.util.Log
 import android.util.Size
 import android.view.View
 import android.widget.FrameLayout
@@ -314,10 +315,7 @@ class CardScanActivity :
             }
 
             AnalyzerPoolFactory(
-                PaymentCardOcrAnalyzer.Factory(
-                    SSDOcr.Factory(context, SSDOcr.ModelLoader(context)),
-                    nameDetect
-                )
+                PaymentCardOcrAnalyzer.Factory(SSDOcr.Factory(context, SSDOcr.ModelLoader(context)), nameDetect)
             ).buildAnalyzerPool()
         }
     }
@@ -537,6 +535,8 @@ class CardScanActivity :
             if (objectBoxes != null) {
                 debugOverlayView.setBoxes(objectBoxes.map { it.forDebugObjDetect(frame.cardFinder, frame.previewSize) })
             }
+
+            Log.d(Config.logTag, "Delay between capture and result for this frame was ${frame.capturedAt.elapsedSince()}")
         }
     }
 
@@ -640,7 +640,8 @@ class CardScanActivity :
                     SSDOcr.Input(
                         fullImage = it,
                         previewSize = Size(previewFrame.width, previewFrame.height),
-                        cardFinder = viewFinderRect
+                        cardFinder = viewFinderRect,
+                        capturedAt = Clock.markNow()
                     )
                 },
                 processingCoroutineScope = this
