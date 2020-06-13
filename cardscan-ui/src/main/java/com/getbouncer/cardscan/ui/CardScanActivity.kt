@@ -4,10 +4,12 @@ import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
 import android.graphics.PointF
 import android.graphics.Rect
 import android.os.Bundle
 import android.os.Parcelable
+import android.util.Log
 import android.util.Size
 import android.view.View
 import android.widget.FrameLayout
@@ -60,7 +62,8 @@ import kotlinx.android.synthetic.main.bouncer_activity_card_scan.viewFinderBorde
 import kotlinx.android.synthetic.main.bouncer_activity_card_scan.viewFinderWindow
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
-import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
@@ -124,7 +127,7 @@ data class CardScanActivityResult(
 ) : Parcelable
 
 class CardScanActivity :
-    ScanActivity<SSDOcr.Input>(),
+    ScanActivity(),
     AggregateResultListener<SSDOcr.Input, PaymentCardOcrState, OcrResultAggregator.InterimResult, PaymentCardOcrResult> {
 
     companion object {
@@ -145,12 +148,11 @@ class CardScanActivity :
          * @param context: A context to use for warming up the analyzers.
          */
         @JvmStatic
-        @JvmOverloads
-        fun warmUp(context: Context, apiKey: String, enableNameExtraction: Boolean = false) {
+        fun initializeNameExtraction(context: Context, apiKey: String) {
             Config.apiKey = apiKey
 
             GlobalScope.launch(Dispatchers.Default) {
-                getAnalyzerPool(context, enableNameExtraction)
+                getAnalyzerPool(context.applicationContext, true)
             }
         }
 
@@ -305,10 +307,7 @@ class CardScanActivity :
         private val getAnalyzerPool = memoizeSuspend { context: Context, enableNameExtraction: Boolean ->
             val nameDetect = if (enableNameExtraction) {
                 NameDetectAnalyzer.Factory(
-                    SSDObjectDetect.Factory(
-                        context,
-                        SSDObjectDetect.ModelLoader(context)
-                    ),
+                    SSDObjectDetect.Factory(context, SSDObjectDetect.ModelLoader(context)),
                     AlphabetDetect.Factory(context, AlphabetDetect.ModelLoader(context))
                 )
             } else {
@@ -316,10 +315,7 @@ class CardScanActivity :
             }
 
             AnalyzerPoolFactory(
-                PaymentCardOcrAnalyzer.Factory(
-                    SSDOcr.Factory(context, SSDOcr.ModelLoader(context)),
-                    nameDetect
-                )
+                PaymentCardOcrAnalyzer.Factory(SSDOcr.Factory(context, SSDOcr.ModelLoader(context)), nameDetect)
             ).buildAnalyzerPool()
         }
     }
@@ -460,11 +456,6 @@ class CardScanActivity :
         flashButtonView.setVisible(supported)
     }
 
-    override fun buildFrameConverter() = CardImageFrameConverter(
-        previewSize = Size(previewFrame.width, previewFrame.height),
-        cardFinder = viewFinderRect
-    )
-
     private var scanState = State.NOT_FOUND
     private fun setStateNotFound() {
         if (scanState != State.NOT_FOUND) {
@@ -544,6 +535,8 @@ class CardScanActivity :
             if (objectBoxes != null) {
                 debugOverlayView.setBoxes(objectBoxes.map { it.forDebugObjDetect(frame.cardFinder, frame.previewSize) })
             }
+
+            Log.d(Config.logTag, "Delay between capture and result for this frame was ${frame.capturedAt.elapsedSince()}")
         }
     }
 
@@ -579,7 +572,7 @@ class CardScanActivity :
             fadeIn(cardNameTextView)
         }
 
-        if (pan != null && isPossiblyValidPan(pan)) {
+        if (isPossiblyValidPan(pan)) {
             if (enableNameExtraction && result.analyzerResult.isNameExtractionAvailable) {
                 setStateFoundLong()
             } else {
@@ -609,7 +602,7 @@ class CardScanActivity :
     /**
      * Once the camera stream is available, start processing images.
      */
-    override fun onCameraStreamAvailable(cameraStream: Channel<SSDOcr.Input>) {
+    override fun onCameraStreamAvailable(cameraStream: Flow<Bitmap>) {
         mainLoopResultAggregator = OcrResultAggregator(
             config = ResultAggregatorConfig.Builder()
                 .withMaxTotalAggregationTime(if (enableNameExtraction) 15.seconds else 2.seconds)
@@ -624,7 +617,7 @@ class CardScanActivity :
         mainLoopResultAggregator.bindToLifecycle(this)
 
         val mainLoop = ProcessBoundAnalyzerLoop(
-            analyzerPool = runBlocking { getAnalyzerPool(this@CardScanActivity, enableNameExtraction) },
+            analyzerPool = runBlocking { getAnalyzerPool(this@CardScanActivity.applicationContext, enableNameExtraction) },
             resultHandler = mainLoopResultAggregator,
             initialState = PaymentCardOcrState(
                 runOcr = true,
@@ -642,7 +635,17 @@ class CardScanActivity :
         )
 
         launch(Dispatchers.Default) {
-            mainLoop.subscribeTo(cameraStream, this)
+            mainLoop.subscribeTo(
+                flow = cameraStream.map {
+                    SSDOcr.Input(
+                        fullImage = it,
+                        previewSize = Size(previewFrame.width, previewFrame.height),
+                        cardFinder = viewFinderRect,
+                        capturedAt = Clock.markNow()
+                    )
+                },
+                processingCoroutineScope = this
+            )
         }
     }
 
