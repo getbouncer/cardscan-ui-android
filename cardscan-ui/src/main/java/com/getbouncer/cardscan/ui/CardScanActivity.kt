@@ -568,7 +568,12 @@ class CardScanActivity :
 
         if (displayCardholderName && result.mostLikelyName != null) {
             cardNameTextView.text = result.mostLikelyName
-            cardNameTextView.visibility = View.VISIBLE
+            fadeIn(cardNameTextView)
+        }
+
+        // if we're using debug, always show the latest name from the analyzer.
+        if (Config.isDebug && result.analyzerResult.name != null) {
+            cardNameTextView.text = result.analyzerResult.name
             fadeIn(cardNameTextView)
         }
 
@@ -609,7 +614,8 @@ class CardScanActivity :
                 .withDefaultMaxSavedFrames(0)
                 .build(),
             listener = this,
-            requiredAgreementCount = 5,
+            requiredPanAgreementCount = 5,
+            requiredNameAgreementCount = 3,
             isNameExtractionEnabled = enableNameExtraction
         )
 

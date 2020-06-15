@@ -15,14 +15,15 @@ data class PaymentCardOcrResult(val pan: String?, val name: String?, val expiry:
  * Keep track of the results from the [AnalyzerLoop]. Count the number of times the loop sends each
  * PAN as a result, and when the first result is received.
  *
- * The [listener] will be notified of a result once [requiredAgreementCount] matching results are
- * received or the time since the first result exceeds the
- * [ResultAggregatorConfig.maxTotalAggregationTime].
+ * The [listener] will be notified of a result once [requiredPanAgreementCount] matching pan results are
+ * received and [requiredNameAgreementCount] matching name results are received, or the time since the first result
+ * exceeds the [ResultAggregatorConfig.maxTotalAggregationTime].
  */
 class OcrResultAggregator(
     config: ResultAggregatorConfig,
     listener: AggregateResultListener<SSDOcr.Input, PaymentCardOcrState, InterimResult, PaymentCardOcrResult>,
-    private val requiredAgreementCount: Int? = null,
+    private val requiredPanAgreementCount: Int? = null,
+    private val requiredNameAgreementCount: Int? = null,
     private val isNameExtractionEnabled: Boolean = false
 ) : ResultAggregator<SSDOcr.Input, PaymentCardOcrState, PaymentCardOcrAnalyzer.Prediction, OcrResultAggregator.InterimResult, PaymentCardOcrResult>(
     config = config,
@@ -75,7 +76,7 @@ class OcrResultAggregator(
             panResults.countResult(pan) // This must be last so numberCount is assigned.
         } else 0
 
-        if (!isPanScanningComplete && requiredAgreementCount != null && numberCount >= requiredAgreementCount) {
+        if (!isPanScanningComplete && requiredPanAgreementCount != null && numberCount >= requiredPanAgreementCount) {
             isPanScanningComplete = true
             updateState(state.copy(runOcr = false, runNameExtraction = true))
         }
@@ -85,7 +86,7 @@ class OcrResultAggregator(
             nameResults.countResult(name)
         } else 0
 
-        if (!isNameFound && requiredAgreementCount != null && nameCount >= requiredAgreementCount) {
+        if (!isNameFound && requiredPanAgreementCount != null && nameCount >= requiredPanAgreementCount) {
             isNameFound = true
         }
 
