@@ -25,6 +25,8 @@ import com.getbouncer.scan.framework.ProcessBoundAnalyzerLoop
 import com.getbouncer.scan.framework.ResultAggregatorConfig
 import com.getbouncer.scan.framework.SavedFrame
 import com.getbouncer.scan.framework.time.Clock
+import com.getbouncer.scan.framework.time.Duration
+import com.getbouncer.scan.framework.time.milliseconds
 import com.getbouncer.scan.framework.time.seconds
 import com.getbouncer.scan.framework.util.memoizeSuspend
 import com.getbouncer.scan.payment.analyzer.NameDetectAnalyzer
@@ -561,20 +563,28 @@ class CardScanActivity :
             scanStat.trackResult("ocr_pan_observed")
             fadeOut(enterCardManuallyButtonView)
         }
-        if (displayCardPan && result.hasValidPan && !pan.isNullOrEmpty()) {
-            cardPanTextView.text = formatPan(pan)
-            fadeIn(cardPanTextView, 1.seconds)
-        }
 
-        if (displayCardholderName && result.mostLikelyName != null) {
-            cardNameTextView.text = result.mostLikelyName
-            fadeIn(cardNameTextView)
-        }
+        // if we're using debug, always show the latest number and name from the analyzer
+        if (Config.isDebug) {
+            if (displayCardPan) {
+                cardPanTextView.text = formatPan(result.analyzerResult.pan ?: "")
+                fadeIn(cardPanTextView, Duration.ZERO)
+            }
 
-        // if we're using debug, always show the latest name from the analyzer.
-        if (Config.isDebug && result.analyzerResult.name != null) {
-            cardNameTextView.text = result.analyzerResult.name
-            fadeIn(cardNameTextView)
+            if (displayCardholderName) {
+                cardNameTextView.text = result.analyzerResult.name ?: ""
+                fadeIn(cardNameTextView, Duration.ZERO)
+            }
+        } else {
+            if (displayCardPan && result.hasValidPan && !pan.isNullOrEmpty()) {
+                cardPanTextView.text = formatPan(pan)
+                fadeIn(cardPanTextView)
+            }
+
+            if (displayCardholderName && result.mostLikelyName != null) {
+                cardNameTextView.text = result.mostLikelyName
+                fadeIn(cardNameTextView)
+            }
         }
 
         if (isPossiblyValidPan(pan)) {
@@ -583,18 +593,6 @@ class CardScanActivity :
             } else {
                 setStateFoundShort()
             }
-        }
-
-        // always show up to date number and name
-        if (pan != null) {
-            cardPanTextView.text = formatPan(pan)
-            fadeIn(cardPanTextView, 0.seconds)
-        }
-
-        if (result.analyzerResult.name != null) {
-            cardNameTextView.text = result.analyzerResult.name
-            cardNameTextView.visibility = View.VISIBLE
-            fadeIn(cardNameTextView, 0.seconds)
         }
 
         showDebugFrame(frame, result.analyzerResult.panDetectionBoxes, result.analyzerResult.objDetectionBoxes)
