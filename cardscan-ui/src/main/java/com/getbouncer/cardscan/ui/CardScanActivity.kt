@@ -26,7 +26,6 @@ import com.getbouncer.scan.framework.ResultAggregatorConfig
 import com.getbouncer.scan.framework.SavedFrame
 import com.getbouncer.scan.framework.time.Clock
 import com.getbouncer.scan.framework.time.Duration
-import com.getbouncer.scan.framework.time.milliseconds
 import com.getbouncer.scan.framework.time.seconds
 import com.getbouncer.scan.framework.util.memoizeSuspend
 import com.getbouncer.scan.payment.analyzer.NameDetectAnalyzer
