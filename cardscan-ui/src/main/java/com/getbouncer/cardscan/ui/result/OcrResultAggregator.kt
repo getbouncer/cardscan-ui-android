@@ -85,7 +85,7 @@ class OcrResultAggregator(
             nameResults.countResult(name)
         } else 0
 
-        if (!isNameFound && nameCount >= 2) {
+        if (!isNameFound && requiredAgreementCount != null && nameCount >= requiredAgreementCount) {
             isNameFound = true
         }
 
