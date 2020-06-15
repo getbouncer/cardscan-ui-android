@@ -566,8 +566,8 @@ class CardScanActivity :
             fadeIn(cardPanTextView, 1.seconds)
         }
 
-        if (displayCardholderName && result.analyzerResult.name != null) {
-            cardNameTextView.text = result.analyzerResult.name
+        if (displayCardholderName && result.mostLikelyName != null) {
+            cardNameTextView.text = result.mostLikelyName
             cardNameTextView.visibility = View.VISIBLE
             fadeIn(cardNameTextView)
         }

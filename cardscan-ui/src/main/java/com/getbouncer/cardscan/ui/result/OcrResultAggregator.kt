@@ -32,6 +32,7 @@ class OcrResultAggregator(
     data class InterimResult(
         val analyzerResult: PaymentCardOcrAnalyzer.Prediction,
         val mostLikelyPan: String?,
+        val mostLikelyName: String?,
         val hasValidPan: Boolean
     )
 
@@ -64,6 +65,7 @@ class OcrResultAggregator(
         val interimResult = InterimResult(
             analyzerResult = result,
             mostLikelyPan = panResults.getMostLikelyResult(),
+            mostLikelyName = nameResults.getMostLikelyResult(minCount = 2),
             hasValidPan = isValidPan(result.pan)
         )
 
