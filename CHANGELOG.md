@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.0.0012](https://github.com/getbouncer/cardscan-ui-android/tree/2.0.0012) (2020-06-15)
+
+[Full Changelog](https://github.com/getbouncer/cardscan-ui-android/compare/2.0.0011...2.0.0012)
+
+**Merged pull requests:**
+
+- Reduce jitter in name display [\#31](https://github.com/getbouncer/cardscan-ui-android/pull/31) ([awushensky](https://github.com/awushensky))
+- Fix analyzer pool memory leak [\#30](https://github.com/getbouncer/cardscan-ui-android/pull/30) ([awushensky](https://github.com/awushensky))
+- Actually reset the result aggregator [\#29](https://github.com/getbouncer/cardscan-ui-android/pull/29) ([awushensky](https://github.com/awushensky))
+- Relocate scan logic [\#28](https://github.com/getbouncer/cardscan-ui-android/pull/28) ([awushensky](https://github.com/awushensky))
+- Relocate scan flow to implementation [\#27](https://github.com/getbouncer/cardscan-ui-android/pull/27) ([awushensky](https://github.com/awushensky))
+- Separate camera and loops [\#26](https://github.com/getbouncer/cardscan-ui-android/pull/26) ([awushensky](https://github.com/awushensky))
+
 ## [2.0.0011](https://github.com/getbouncer/cardscan-ui-android/tree/2.0.0011) (2020-06-08)
 
 [Full Changelog](https://github.com/getbouncer/cardscan-ui-android/compare/2.0.0009...2.0.0011)
