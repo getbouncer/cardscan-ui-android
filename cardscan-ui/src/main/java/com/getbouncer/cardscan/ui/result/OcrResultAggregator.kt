@@ -87,12 +87,9 @@ class OcrResultAggregator(
         val isNameExtractionAvailable = isNameExtractionEnabled && result.isNameAndExpiryExtractionAvailable
         val isExpiryExtractionAvailable = isExpiryExtractionEnabled && result.isNameAndExpiryExtractionAvailable
 
-        return if (mustReturnFinal ||
-            (isPanScanningComplete &&
-                    (!isNameExtractionAvailable || isNameFound) &&
-                    (!isExpiryExtractionAvailable || isExpiryFound)
-            )
-        ) {
+        val isAggregationComplete = isPanScanningComplete && (!isNameExtractionAvailable || isNameFound) && (!isExpiryExtractionAvailable || isExpiryFound)
+
+        return if (mustReturnFinal || isAggregationComplete) {
             val finalName = if (!result.isNameAndExpiryExtractionAvailable && isNameExtractionEnabled) {
                 NAME_OR_EXPIRY_UNAVAILABLE_RESPONSE
             } else {
@@ -128,11 +125,13 @@ class OcrResultAggregator(
 
         if (!isPanScanningComplete && requiredPanAgreementCount != null && numberCount >= requiredPanAgreementCount) {
             isPanScanningComplete = true
-            updateState(state.copy(
-                runOcr = false,
-                runNameExtraction = isNameExtractionEnabled,
-                runExpiryExtraction = isExpiryExtractionEnabled
-            ))
+            updateState(
+                state.copy(
+                    runOcr = false,
+                    runNameExtraction = isNameExtractionEnabled,
+                    runExpiryExtraction = isExpiryExtractionEnabled
+                )
+            )
         }
     }
 
@@ -148,7 +147,6 @@ class OcrResultAggregator(
             isNameFound = true
         }
     }
-
 
     /**
      * Updates internal counter for expiry, and associated states for finishing the aggregator
