@@ -35,7 +35,7 @@ These libraries are published in the [jcenter](https://jcenter.bintray.com/com/g
 
 ```gradle
 dependencies {
-    implementation 'com.getbouncer:cardscan-ui:2.0.0011'
+    implementation 'com.getbouncer:cardscan-ui:2.0.0012'
 }
 ```
 
@@ -46,7 +46,7 @@ This library provides a user interface through which payment cards can be scanne
 ```kotlin
 class LaunchActivity : AppCompatActivity, CardScanActivityResultHandler {
 
-    private const val API_KEY = "qOJ_fF-WLDMbG05iBq5wvwiTNTmM2qIn";
+    private const val API_KEY = "<YOUR_API_KEY_HERE>";
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState);
@@ -62,11 +62,18 @@ class LaunchActivity : AppCompatActivity, CardScanActivityResultHandler {
             CardScanActivity.start(
                 activity = LaunchActivity.this,
                 apiKey = API_KEY,
-                enableEnterCardManually = true
+                enableEnterCardManually = true,
+                enableNameExtraction = true  // name extraction is in beta. See the comment below.
             )
         }
 
-        CardScanActivity.warmUp(this)
+        /*
+         * To test name extraction, please first provision an API key, then reach out to support@bouncer.com with
+         * details about your use case and estimated volumes.
+         *
+         * If you are not planning to use name extraction, you can omit the line below.
+         */
+        CardScanActivity.initializeNameExtraction(this, API_KEY)
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {

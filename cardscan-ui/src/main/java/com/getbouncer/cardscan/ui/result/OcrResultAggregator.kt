@@ -21,34 +21,34 @@ data class PaymentCardOcrResult(
  * Keep track of the results from the [AnalyzerLoop]. Count the number of times the loop sends each
  * PAN as a result, and when the first result is received.
  *
- * The [listener] will be notified of a result once [requiredAgreementCount] matching results are
- * received or the time since the first result exceeds the
- * [ResultAggregatorConfig.maxTotalAggregationTime].
+ * The [listener] will be notified of a result once [requiredPanAgreementCount] matching pan results are
+ * received and [requiredNameAgreementCount] matching name results are received, or the time since the first result
+ * exceeds the [ResultAggregatorConfig.maxTotalAggregationTime].
  */
 class OcrResultAggregator(
     config: ResultAggregatorConfig,
     listener: AggregateResultListener<SSDOcr.Input, PaymentCardOcrState, InterimResult, PaymentCardOcrResult>,
-    name: String,
-    private val requiredAgreementCount: Int? = null,
+    private val requiredPanAgreementCount: Int? = null,
+    private val requiredNameAgreementCount: Int? = null,
     private val isNameExtractionEnabled: Boolean = false,
     private val isExpiryExtractionEnabled: Boolean = false
 ) : ResultAggregator<SSDOcr.Input, PaymentCardOcrState, PaymentCardOcrAnalyzer.Prediction, OcrResultAggregator.InterimResult, PaymentCardOcrResult>(
     config = config,
-    listener = listener,
-    name = name
+    listener = listener
 ) {
 
     data class InterimResult(
         val analyzerResult: PaymentCardOcrAnalyzer.Prediction,
         val mostLikelyPan: String?,
+        val mostLikelyName: String?,
         val hasValidPan: Boolean
     )
 
     companion object {
-        const val FRAME_TYPE_VALID_NUMBER = "valid_number"
-        const val FRAME_TYPE_INVALID_NUMBER = "invalid_number"
         const val NAME_OR_EXPIRY_UNAVAILABLE_RESPONSE = "<Insufficient API key permissions>"
     }
+
+    override val name: String = "ocr_result_aggregator"
 
     private val panResults = ResultCounter<String>()
     private val nameResults = ResultCounter<String>()
@@ -75,6 +75,7 @@ class OcrResultAggregator(
         val interimResult = InterimResult(
             analyzerResult = result,
             mostLikelyPan = panResults.getMostLikelyResult(),
+            mostLikelyName = nameResults.getMostLikelyResult(minCount = 2),
             hasValidPan = isValidPan(result.pan)
         )
 
@@ -124,7 +125,7 @@ class OcrResultAggregator(
             panResults.countResult(pan) // This must be last so numberCount is assigned.
         } else 0
 
-        if (!isPanScanningComplete && requiredAgreementCount != null && numberCount >= requiredAgreementCount) {
+        if (!isPanScanningComplete && requiredPanAgreementCount != null && numberCount >= requiredPanAgreementCount) {
             isPanScanningComplete = true
             updateState(state.copy(
                 runOcr = false,
@@ -166,13 +167,10 @@ class OcrResultAggregator(
         }
     }
 
-    // TODO: This should identify the least blurry images and store them in their own identifier
-    override fun getSaveFrameIdentifier(result: InterimResult, frame: SSDOcr.Input): String? =
-        if (result.hasValidPan) {
-            FRAME_TYPE_VALID_NUMBER
-        } else {
-            FRAME_TYPE_INVALID_NUMBER
-        }
+    /**
+     * Do not save frames for cardscan
+     */
+    override fun getSaveFrameIdentifier(result: InterimResult, frame: SSDOcr.Input): String? = null
 
     override fun getFrameSizeBytes(frame: SSDOcr.Input): Int = frame.fullImage.byteCount
 }

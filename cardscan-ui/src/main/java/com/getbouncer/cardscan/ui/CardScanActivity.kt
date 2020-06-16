@@ -4,10 +4,12 @@ import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
 import android.graphics.PointF
 import android.graphics.Rect
 import android.os.Bundle
 import android.os.Parcelable
+import android.util.Log
 import android.util.Size
 import android.view.View
 import android.widget.FrameLayout
@@ -20,12 +22,10 @@ import com.getbouncer.scan.framework.AggregateResultListener
 import com.getbouncer.scan.framework.AnalyzerPoolFactory
 import com.getbouncer.scan.framework.Config
 import com.getbouncer.scan.framework.ProcessBoundAnalyzerLoop
-import com.getbouncer.scan.framework.ResultAggregator
 import com.getbouncer.scan.framework.ResultAggregatorConfig
 import com.getbouncer.scan.framework.SavedFrame
-import com.getbouncer.scan.framework.crop
-import com.getbouncer.scan.framework.size
 import com.getbouncer.scan.framework.time.Clock
+import com.getbouncer.scan.framework.time.Duration
 import com.getbouncer.scan.framework.time.seconds
 import com.getbouncer.scan.framework.util.memoizeSuspend
 import com.getbouncer.scan.payment.analyzer.NameAndExpiryAnalyzer
@@ -64,6 +64,8 @@ import kotlinx.android.synthetic.main.bouncer_activity_card_scan.viewFinderBorde
 import kotlinx.android.synthetic.main.bouncer_activity_card_scan.viewFinderWindow
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
@@ -73,7 +75,7 @@ private const val REQUEST_CODE = 21521 // "bou"
 
 private val MINIMUM_RESOLUTION = Size(1280, 720) // minimum size of an object square
 
-enum class State(val value: Int) {
+private enum class State(val value: Int) {
     NOT_FOUND(0),
     FOUND(1);
 }
@@ -128,7 +130,7 @@ data class CardScanActivityResult(
 ) : Parcelable
 
 class CardScanActivity :
-    ScanActivity<SSDOcr.Input, PaymentCardOcrState, PaymentCardOcrAnalyzer.Prediction, OcrResultAggregator.InterimResult, PaymentCardOcrResult>(),
+    ScanActivity(),
     AggregateResultListener<SSDOcr.Input, PaymentCardOcrState, OcrResultAggregator.InterimResult, PaymentCardOcrResult> {
 
     companion object {
@@ -150,12 +152,11 @@ class CardScanActivity :
          * @param context: A context to use for warming up the analyzers.
          */
         @JvmStatic
-        @JvmOverloads
-        fun warmUp(context: Context, apiKey: String, enableNameExtraction: Boolean = false) {
+        fun initializeNameExtraction(context: Context, apiKey: String) {
             Config.apiKey = apiKey
 
             GlobalScope.launch(Dispatchers.Default) {
-                getAnalyzerPool(context, enableNameExtraction)
+                getAnalyzerPool(context.applicationContext, true)
             }
         }
 
@@ -313,22 +314,19 @@ class CardScanActivity :
         @JvmStatic
         fun isScanResult(requestCode: Int) = REQUEST_CODE == requestCode
 
-        private val getAnalyzerPool = memoizeSuspend { context: Context, enableEnterCardManually: Boolean ->
-            val nameDetect = if (enableEnterCardManually) {
+        private val getAnalyzerPool = memoizeSuspend { context: Context, enableNameOrExpiryExtraction: Boolean ->
+            val nameDetect = if (enableNameOrExpiryExtraction) {
                 NameAndExpiryAnalyzer.Factory(
                     TextDetector.Factory(context, TextDetector.ModelLoader(context)),
                     AlphabetDetect.Factory(context, AlphabetDetect.ModelLoader(context)),
-                    ExpiryDetect.Factory(context, ExpiryDetect.ModelLoader(context))
+                    ExpiryDetect.Factory(context, AlphabetDetect.ModelLoader(context))
                 )
             } else {
                 null
             }
 
             AnalyzerPoolFactory(
-                PaymentCardOcrAnalyzer.Factory(
-                    SSDOcr.Factory(context, SSDOcr.ModelLoader(context)),
-                    nameDetect
-                )
+                PaymentCardOcrAnalyzer.Factory(SSDOcr.Factory(context, SSDOcr.ModelLoader(context)), nameDetect)
             ).buildAnalyzerPool()
         }
     }
@@ -360,6 +358,8 @@ class CardScanActivity :
     private var mainLoopIsProducingResults = AtomicBoolean(false)
     private val hasPreviousValidResult = AtomicBoolean(false)
     private var lastDebugFrameUpdate = Clock.markNow()
+
+    private lateinit var mainLoopResultAggregator: OcrResultAggregator
 
     private val viewFinderRect by lazy {
         Rect(
@@ -407,15 +407,15 @@ class CardScanActivity :
         updateIcons()
     }
 
+    override fun onPause() {
+        super.onPause()
+        viewFinderBackground.clearOnDrawListener()
+    }
+
     override fun onResume() {
         super.onResume()
         setStateNotFound()
         viewFinderBackground.setOnDrawListener { updateIcons() }
-    }
-
-    override fun onPause() {
-        super.onPause()
-        viewFinderBackground.clearOnDrawListener()
     }
 
     private fun updateIcons() {
@@ -470,41 +470,6 @@ class CardScanActivity :
     override fun onFlashSupported(supported: Boolean) {
         flashButtonView.setVisible(supported)
     }
-
-    override fun buildFrameConverter() = CardImageFrameConverter(
-        previewSize = Size(previewFrame.width, previewFrame.height),
-        cardFinder = viewFinderRect
-    )
-
-    override fun buildResultAggregator() = OcrResultAggregator(
-        config = ResultAggregatorConfig.Builder()
-            .withMaxTotalAggregationTime(if (enableNameExtraction || enableExpiryExtraction) 15.seconds else 2.seconds)
-            .withDefaultMaxSavedFrames(0)
-            .build(),
-        listener = this,
-        name = "main_loop",
-        requiredAgreementCount = 2,
-        isNameExtractionEnabled = enableNameExtraction,
-        isExpiryExtractionEnabled = enableExpiryExtraction
-    )
-
-    override fun buildMainLoop(
-        resultAggregator: ResultAggregator<SSDOcr.Input, PaymentCardOcrState, PaymentCardOcrAnalyzer.Prediction, OcrResultAggregator.InterimResult, PaymentCardOcrResult>
-    ): ProcessBoundAnalyzerLoop<SSDOcr.Input, PaymentCardOcrState, PaymentCardOcrAnalyzer.Prediction> =
-        ProcessBoundAnalyzerLoop(
-            analyzerPool = runBlocking { getAnalyzerPool(this@CardScanActivity, enableNameExtraction || enableExpiryExtraction) },
-            resultHandler = resultAggregator,
-            initialState = PaymentCardOcrState(true, false, false),
-            name = "main_loop",
-            onAnalyzerFailure = {
-                analyzerFailureCancelScan(it)
-                true // terminate the loop on any analyzer failures
-            },
-            onResultFailure = {
-                analyzerFailureCancelScan(it)
-                true // terminate the loop on any result failures
-            }
-        )
 
     private var scanState = State.NOT_FOUND
     private fun setStateNotFound() {
@@ -571,6 +536,26 @@ class CardScanActivity :
         )
     }.let { Unit }
 
+    private suspend fun showDebugFrame(
+        frame: SSDOcr.Input,
+        panBoxes: List<DetectionBox>?,
+        objectBoxes: List<DetectionBox>?
+    ) {
+        if (Config.isDebug && lastDebugFrameUpdate.elapsedSince() > 1.seconds) {
+            lastDebugFrameUpdate = Clock.markNow()
+            val bitmap = withContext(Dispatchers.Default) { SSDOcr.cropImage(frame) }
+            debugBitmapView.setImageBitmap(bitmap)
+            if (panBoxes != null) {
+                debugOverlayView.setBoxes(panBoxes.map { it.forDebugPan() })
+            }
+            if (objectBoxes != null) {
+                debugOverlayView.setBoxes(objectBoxes.map { it.forDebugObjDetect(frame.cardFinder, frame.previewSize) })
+            }
+
+            Log.d(Config.logTag, "Delay between capture and result for this frame was ${frame.capturedAt.elapsedSince()}")
+        }
+    }
+
     /**
      * An interim result was received from the result aggregator.
      */
@@ -592,63 +577,100 @@ class CardScanActivity :
             scanStat.trackResult("ocr_pan_observed")
             fadeOut(enterCardManuallyButtonView)
         }
-        if (displayCardPan && result.hasValidPan && !pan.isNullOrEmpty()) {
-            cardPanTextView.text = formatPan(pan)
-            fadeIn(cardPanTextView, 1.seconds)
+
+        // if we're using debug, always show the latest number and name from the analyzer
+        if (Config.isDebug) {
+            if (displayCardPan) {
+                cardPanTextView.text = formatPan(result.analyzerResult.pan ?: "")
+                fadeIn(cardPanTextView, Duration.ZERO)
+            }
+
+            if (displayCardholderName) {
+                cardNameTextView.text = result.analyzerResult.name ?: ""
+                fadeIn(cardNameTextView, Duration.ZERO)
+            }
+        } else {
+            if (displayCardPan && result.hasValidPan && !pan.isNullOrEmpty()) {
+                cardPanTextView.text = formatPan(pan)
+                fadeIn(cardPanTextView)
+            }
+
+            if (displayCardholderName && result.mostLikelyName != null) {
+                cardNameTextView.text = result.mostLikelyName
+                fadeIn(cardNameTextView)
+            }
         }
 
-        if (displayCardholderName && result.analyzerResult.name != null) {
-            cardNameTextView.text = result.analyzerResult.name
-            cardNameTextView.visibility = View.VISIBLE
-            fadeIn(cardNameTextView)
-        }
-
-        if (pan != null && isPossiblyValidPan(pan)) {
-            if ((enableNameExtraction || enableExpiryExtraction) && result.analyzerResult.isNameAndExpiryExtractionAvailable) {
+        if (isPossiblyValidPan(pan)) {
+            if (enableNameExtraction && result.analyzerResult.isNameAndExpiryExtractionAvailable) {
                 setStateFoundLong()
             } else {
                 setStateFoundShort()
             }
         }
 
-        if (Config.isDebug && lastDebugFrameUpdate.elapsedSince() > 1.seconds) {
-            lastDebugFrameUpdate = Clock.markNow()
-            val bitmap = withContext(Dispatchers.Default) {
-                frame.fullImage.crop(
-                    SSDOcr.calculateCrop(
-                        frame.fullImage.size(),
-                        frame.previewSize,
-                        frame.cardFinder
-                    )
-                )
-            }
-            debugBitmapView.setImageBitmap(bitmap)
-            if (result.analyzerResult.panDetectionBoxes != null) {
-                debugOverlayView.setBoxes(result.analyzerResult.panDetectionBoxes?.map { it.forDebugPan() })
-            }
-            if (result.analyzerResult.objDetectionBoxes != null) {
-                debugOverlayView.setBoxes(
-                    result.analyzerResult.objDetectionBoxes?.map {
-                        it.forDebugObjDetect(frame.cardFinder, frame.previewSize)
-                    }
-                )
-            }
-
-            // always show up to date number and name
-            if (pan != null) {
-                cardPanTextView.text = formatPan(pan)
-                fadeIn(cardPanTextView, 0.seconds)
-            }
-
-            if (result.analyzerResult.name != null) {
-                cardNameTextView.text = result.analyzerResult.name
-                cardNameTextView.visibility = View.VISIBLE
-                fadeIn(cardNameTextView, 0.seconds)
-            }
-        }
+        showDebugFrame(frame, result.analyzerResult.panDetectionBoxes, result.analyzerResult.objDetectionBoxes)
     }.let { Unit }
 
     override suspend fun onReset() = launch(Dispatchers.Main) { setStateNotFound() }.let { Unit }
 
     override fun getLayoutRes(): Int = R.layout.bouncer_activity_card_scan
+
+    /**
+     * Once the camera stream is available, start processing images.
+     */
+    override fun onCameraStreamAvailable(cameraStream: Flow<Bitmap>) {
+        mainLoopResultAggregator = OcrResultAggregator(
+            config = ResultAggregatorConfig.Builder()
+                .withMaxTotalAggregationTime(if (enableNameExtraction) 15.seconds else 2.seconds)
+                .withDefaultMaxSavedFrames(0)
+                .build(),
+            listener = this,
+            requiredPanAgreementCount = 5,
+            requiredNameAgreementCount = 3,
+            isNameExtractionEnabled = enableNameExtraction
+        )
+
+        // make this result aggregator pause and reset when the lifecycle pauses.
+        mainLoopResultAggregator.bindToLifecycle(this)
+
+        val mainLoop = ProcessBoundAnalyzerLoop(
+            analyzerPool = runBlocking { getAnalyzerPool(this@CardScanActivity.applicationContext, enableNameExtraction) },
+            resultHandler = mainLoopResultAggregator,
+            initialState = PaymentCardOcrState(
+                runOcr = true,
+                runNameExtraction = false,
+                runExpiryExtraction = false
+            ),
+            name = "main_loop",
+            onAnalyzerFailure = {
+                analyzerFailureCancelScan(it)
+                true // terminate the loop on any analyzer failures
+            },
+            onResultFailure = {
+                analyzerFailureCancelScan(it)
+                true // terminate the loop on any result failures
+            }
+        )
+
+        launch(Dispatchers.Default) {
+            mainLoop.subscribeTo(
+                flow = cameraStream.map {
+                    SSDOcr.Input(
+                        fullImage = it,
+                        previewSize = Size(previewFrame.width, previewFrame.height),
+                        cardFinder = viewFinderRect,
+                        capturedAt = Clock.markNow()
+                    )
+                },
+                processingCoroutineScope = this
+            )
+        }
+    }
+
+    override fun onInvalidApiKey() {
+        if (::mainLoopResultAggregator.isInitialized) {
+            mainLoopResultAggregator.cancel()
+        }
+    }
 }
