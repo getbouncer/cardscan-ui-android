@@ -30,6 +30,7 @@ class OcrResultAggregator(
     listener: AggregateResultListener<SSDOcr.Input, PaymentCardOcrState, InterimResult, PaymentCardOcrResult>,
     private val requiredPanAgreementCount: Int? = null,
     private val requiredNameAgreementCount: Int? = null,
+    private val requiredExpiryAgreementCount: Int? = null,
     private val isNameExtractionEnabled: Boolean = false,
     private val isExpiryExtractionEnabled: Boolean = false
 ) : ResultAggregator<SSDOcr.Input, PaymentCardOcrState, PaymentCardOcrAnalyzer.Prediction, OcrResultAggregator.InterimResult, PaymentCardOcrResult>(
@@ -143,11 +144,7 @@ class OcrResultAggregator(
             nameResults.countResult(name)
         } else 0
 
-        if (!isNameFound && nameCount >= 2) {
-            isNameFound = true
-        }
-
-        if (!isNameFound && nameCount >= 2) {
+        if (!isNameFound && requiredNameAgreementCount != null && nameCount >= requiredNameAgreementCount) {
             isNameFound = true
         }
     }
@@ -162,7 +159,7 @@ class OcrResultAggregator(
         } else {
             0
         }
-        if (!isExpiryFound && expiryCount >= 2) {
+        if (!isExpiryFound && requiredExpiryAgreementCount != null && expiryCount >= requiredExpiryAgreementCount) {
             isExpiryFound = true
         }
     }

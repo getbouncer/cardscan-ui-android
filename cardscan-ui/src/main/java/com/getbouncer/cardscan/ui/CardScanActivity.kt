@@ -628,6 +628,7 @@ class CardScanActivity :
             listener = this,
             requiredPanAgreementCount = 5,
             requiredNameAgreementCount = 3,
+            requiredExpiryAgreementCount = 3,
             isNameExtractionEnabled = enableNameExtraction
         )
 
