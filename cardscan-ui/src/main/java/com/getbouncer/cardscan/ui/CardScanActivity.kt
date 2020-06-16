@@ -319,7 +319,7 @@ class CardScanActivity :
                 NameAndExpiryAnalyzer.Factory(
                     TextDetector.Factory(context, TextDetector.ModelLoader(context)),
                     AlphabetDetect.Factory(context, AlphabetDetect.ModelLoader(context)),
-                    ExpiryDetect.Factory(context, AlphabetDetect.ModelLoader(context))
+                    ExpiryDetect.Factory(context, ExpiryDetect.ModelLoader(context))
                 )
             } else {
                 null
@@ -602,7 +602,7 @@ class CardScanActivity :
         }
 
         if (isPossiblyValidPan(pan)) {
-            if (enableNameExtraction && result.analyzerResult.isNameAndExpiryExtractionAvailable) {
+            if ((enableNameExtraction || enableExpiryExtraction) && result.analyzerResult.isNameAndExpiryExtractionAvailable) {
                 setStateFoundLong()
             } else {
                 setStateFoundShort()
@@ -622,21 +622,22 @@ class CardScanActivity :
     override fun onCameraStreamAvailable(cameraStream: Flow<Bitmap>) {
         mainLoopResultAggregator = OcrResultAggregator(
             config = ResultAggregatorConfig.Builder()
-                .withMaxTotalAggregationTime(if (enableNameExtraction) 15.seconds else 2.seconds)
+                .withMaxTotalAggregationTime(if (enableNameExtraction || enableExpiryExtraction) 15.seconds else 2.seconds)
                 .withDefaultMaxSavedFrames(0)
                 .build(),
             listener = this,
-            requiredPanAgreementCount = 5,
-            requiredNameAgreementCount = 3,
+            requiredPanAgreementCount = 2,
+            requiredNameAgreementCount = 2,
             requiredExpiryAgreementCount = 3,
-            isNameExtractionEnabled = enableNameExtraction
+            isNameExtractionEnabled = enableNameExtraction,
+            isExpiryExtractionEnabled = enableExpiryExtraction
         )
 
         // make this result aggregator pause and reset when the lifecycle pauses.
         mainLoopResultAggregator.bindToLifecycle(this)
 
         val mainLoop = ProcessBoundAnalyzerLoop(
-            analyzerPool = runBlocking { getAnalyzerPool(this@CardScanActivity.applicationContext, enableNameExtraction) },
+            analyzerPool = runBlocking { getAnalyzerPool(this@CardScanActivity.applicationContext, enableNameExtraction || enableExpiryExtraction) },
             resultHandler = mainLoopResultAggregator,
             initialState = PaymentCardOcrState(
                 runOcr = true,
