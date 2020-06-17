@@ -123,7 +123,7 @@ class OcrResultAggregator(
             panResults.countResult(pan) // This must be last so numberCount is assigned.
         } else 0
 
-        if (!isPanScanningComplete && requiredPanAgreementCount != null && numberCount >= requiredPanAgreementCount) {
+        if (requiredPanAgreementCount != null && numberCount >= requiredPanAgreementCount) {
             isPanScanningComplete = true
             updateState(
                 state.copy(
@@ -143,7 +143,7 @@ class OcrResultAggregator(
             nameResults.countResult(name)
         } else 0
 
-        if (!isNameFound && requiredNameAgreementCount != null && nameCount >= requiredNameAgreementCount) {
+        if (requiredNameAgreementCount != null && nameCount >= requiredNameAgreementCount) {
             isNameFound = true
         }
     }
@@ -157,7 +157,7 @@ class OcrResultAggregator(
         } else {
             0
         }
-        if (!isExpiryFound && requiredExpiryAgreementCount != null && expiryCount >= requiredExpiryAgreementCount) {
+        if (requiredExpiryAgreementCount != null && expiryCount >= requiredExpiryAgreementCount) {
             isExpiryFound = true
         }
     }
