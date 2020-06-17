@@ -91,12 +91,12 @@ class OcrResultAggregator(
 
         return if (mustReturnFinal || isAggregationComplete) {
             val finalName = if (!result.isNameAndExpiryExtractionAvailable && isNameExtractionEnabled) {
-                NAME_OR_EXPIRY_UNAVAILABLE_RESPONSE
+                null
             } else {
                 nameResults.getMostLikelyResult(minCount = 2)
             }
 
-            val errorString = if (!result.isNameAndExpiryExtractionAvailable && isNameExtractionEnabled) {
+            val errorString = if (!result.isNameAndExpiryExtractionAvailable && (isNameExtractionEnabled || isExpiryExtractionEnabled)) {
                 NAME_OR_EXPIRY_UNAVAILABLE_RESPONSE
             } else null
 
