@@ -17,7 +17,6 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
-
     <com.getbouncer.scan.ui.ViewFinderBackground
         android:id="@+id/viewFinderBackground"
         android:layout_width="0dp"
