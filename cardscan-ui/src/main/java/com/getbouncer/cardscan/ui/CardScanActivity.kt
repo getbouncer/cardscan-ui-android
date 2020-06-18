@@ -522,13 +522,21 @@ class CardScanActivity :
          * thread more tied up with preview than camera2 and cameraX do, and launch is allowing the
          * camera to close before suspending.
          */
+
+        // Only show the expiry dates that are not expired
+        val (expiryMonth, expiryYear) = if (result.expiry?.isValidExpiry() == true) {
+            (result.expiry.month.toString() to result.expiry.year.toString())
+        } else {
+            (null to null)
+        }
+
         cardScanned(
             CardScanActivityResult(
                 pan = result.pan,
                 networkName = getCardIssuer(result.pan).displayName,
                 expiryDay = null,
-                expiryMonth = result.expiry?.month.toString(),
-                expiryYear = result.expiry?.year.toString(),
+                expiryMonth = expiryMonth,
+                expiryYear = expiryYear,
                 cvc = null,
                 cardholderName = result.name,
                 errorString = result.errorString
@@ -626,7 +634,7 @@ class CardScanActivity :
                 .withDefaultMaxSavedFrames(0)
                 .build(),
             listener = this,
-            requiredPanAgreementCount = 2,
+            requiredPanAgreementCount = if (enableNameExtraction || enableExpiryExtraction) 2 else 5,
             requiredNameAgreementCount = 2,
             requiredExpiryAgreementCount = 3,
             isNameExtractionEnabled = enableNameExtraction,
