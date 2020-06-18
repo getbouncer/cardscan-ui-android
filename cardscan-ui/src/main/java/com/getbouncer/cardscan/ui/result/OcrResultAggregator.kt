@@ -7,9 +7,15 @@ import com.getbouncer.scan.framework.ResultCounter
 import com.getbouncer.scan.payment.analyzer.PaymentCardOcrAnalyzer
 import com.getbouncer.scan.payment.analyzer.PaymentCardOcrState
 import com.getbouncer.scan.payment.card.isValidPan
+import com.getbouncer.scan.payment.ml.ExpiryDetect
 import com.getbouncer.scan.payment.ml.SSDOcr
 
-data class PaymentCardOcrResult(val pan: String?, val name: String?, val expiry: String?)
+data class PaymentCardOcrResult(
+    val pan: String?,
+    val name: String?,
+    val expiry: ExpiryDetect.Expiry?,
+    val errorString: String?
+)
 
 /**
  * Keep track of the results from the [AnalyzerLoop]. Count the number of times the loop sends each
@@ -24,7 +30,9 @@ class OcrResultAggregator(
     listener: AggregateResultListener<SSDOcr.Input, PaymentCardOcrState, InterimResult, PaymentCardOcrResult>,
     private val requiredPanAgreementCount: Int? = null,
     private val requiredNameAgreementCount: Int? = null,
-    private val isNameExtractionEnabled: Boolean = false
+    private val requiredExpiryAgreementCount: Int? = null,
+    private val isNameExtractionEnabled: Boolean = false,
+    private val isExpiryExtractionEnabled: Boolean = false
 ) : ResultAggregator<SSDOcr.Input, PaymentCardOcrState, PaymentCardOcrAnalyzer.Prediction, OcrResultAggregator.InterimResult, PaymentCardOcrResult>(
     config = config,
     listener = listener
@@ -38,16 +46,18 @@ class OcrResultAggregator(
     )
 
     companion object {
-        const val NAME_UNAVAILABLE_RESPONSE = "<Insufficient API key permissions>"
+        const val NAME_OR_EXPIRY_UNAVAILABLE_RESPONSE = "<Insufficient API key permissions>"
     }
 
     override val name: String = "ocr_result_aggregator"
 
     private val panResults = ResultCounter<String>()
     private val nameResults = ResultCounter<String>()
+    private val expiryResults = ResultCounter<ExpiryDetect.Expiry>()
 
     private var isPanScanningComplete: Boolean = false
     private var isNameFound: Boolean = false
+    private var isExpiryFound: Boolean = false
 
     override suspend fun reset() {
         super.reset()
@@ -70,41 +80,85 @@ class OcrResultAggregator(
             hasValidPan = isValidPan(result.pan)
         )
 
+        updatePanState(result, state, startAggregationTimer, updateState)
+        updateNameState(result.name)
+        updateExpiryState(result.expiry)
+
+        val isNameExtractionAvailable = isNameExtractionEnabled && result.isNameAndExpiryExtractionAvailable
+        val isExpiryExtractionAvailable = isExpiryExtractionEnabled && result.isNameAndExpiryExtractionAvailable
+
+        val isAggregationComplete = isPanScanningComplete && (!isNameExtractionAvailable || isNameFound) && (!isExpiryExtractionAvailable || isExpiryFound)
+
+        return if (mustReturnFinal || isAggregationComplete) {
+            val finalName = if (!result.isNameAndExpiryExtractionAvailable && isNameExtractionEnabled) {
+                null
+            } else {
+                nameResults.getMostLikelyResult(minCount = 2)
+            }
+
+            val errorString = if (!result.isNameAndExpiryExtractionAvailable && (isNameExtractionEnabled || isExpiryExtractionEnabled)) {
+                NAME_OR_EXPIRY_UNAVAILABLE_RESPONSE
+            } else null
+
+            interimResult to PaymentCardOcrResult(
+                panResults.getMostLikelyResult(),
+                finalName,
+                expiry = expiryResults.getMostLikelyResult(minCount = 2),
+                errorString = errorString
+            )
+        } else {
+            interimResult to null
+        }
+    }
+
+    private suspend fun updatePanState(
+        result: PaymentCardOcrAnalyzer.Prediction,
+        state: PaymentCardOcrState,
+        startAggregationTimer: () -> Unit,
+        updateState: (PaymentCardOcrState) -> Unit
+    ) {
         val pan = result.pan
-        val numberCount = if (pan != null && interimResult.hasValidPan) {
+        val numberCount = if (pan != null && isValidPan(result.pan)) {
             startAggregationTimer()
             panResults.countResult(pan) // This must be last so numberCount is assigned.
         } else 0
 
-        if (!isPanScanningComplete && requiredPanAgreementCount != null && numberCount >= requiredPanAgreementCount) {
+        if (requiredPanAgreementCount != null && numberCount >= requiredPanAgreementCount) {
             isPanScanningComplete = true
-            updateState(state.copy(runOcr = false, runNameExtraction = true))
+            updateState(
+                state.copy(
+                    runOcr = false,
+                    runNameExtraction = isNameExtractionEnabled,
+                    runExpiryExtraction = isExpiryExtractionEnabled
+                )
+            )
         }
+    }
 
-        val name = result.name
+    /**
+     * Updates internal counter for expiry, and associated states for finishing the aggregator
+     */
+    private suspend fun updateNameState(name: String?) {
         val nameCount = if (name?.isNotEmpty() == true) {
             nameResults.countResult(name)
         } else 0
 
-        if (!isNameFound && requiredPanAgreementCount != null && nameCount >= requiredPanAgreementCount) {
+        if (requiredNameAgreementCount != null && nameCount >= requiredNameAgreementCount) {
             isNameFound = true
         }
+    }
 
-        val isNameExtractionAvailable = isNameExtractionEnabled && result.isNameExtractionAvailable
-
-        return if (mustReturnFinal || (isPanScanningComplete && (!isNameExtractionAvailable || isNameFound))) {
-            val finalName = if (!result.isNameExtractionAvailable && isNameExtractionEnabled) {
-                NAME_UNAVAILABLE_RESPONSE
-            } else {
-                nameResults.getMostLikelyResult(minCount = 2)
-            }
-            interimResult to PaymentCardOcrResult(
-                panResults.getMostLikelyResult(),
-                finalName,
-                expiry = null
-            )
+    /**
+     * Updates internal counter for expiry, and associated states for finishing the aggregator
+     */
+    private suspend fun updateExpiryState(expiry: ExpiryDetect.Expiry?) {
+        val expiryCount = if (expiry != null) {
+            expiryResults.countResult(expiry)
         } else {
-            interimResult to null
+            0
+        }
+        if (requiredExpiryAgreementCount != null && expiryCount >= requiredExpiryAgreementCount) {
+            isExpiryFound = true
         }
     }
 

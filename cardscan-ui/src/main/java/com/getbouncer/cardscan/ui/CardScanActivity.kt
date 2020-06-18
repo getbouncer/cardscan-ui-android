@@ -28,15 +28,16 @@ import com.getbouncer.scan.framework.time.Clock
 import com.getbouncer.scan.framework.time.Duration
 import com.getbouncer.scan.framework.time.seconds
 import com.getbouncer.scan.framework.util.memoizeSuspend
-import com.getbouncer.scan.payment.analyzer.NameDetectAnalyzer
+import com.getbouncer.scan.payment.analyzer.NameAndExpiryAnalyzer
 import com.getbouncer.scan.payment.analyzer.PaymentCardOcrAnalyzer
 import com.getbouncer.scan.payment.analyzer.PaymentCardOcrState
 import com.getbouncer.scan.payment.card.formatPan
 import com.getbouncer.scan.payment.card.getCardIssuer
 import com.getbouncer.scan.payment.card.isPossiblyValidPan
 import com.getbouncer.scan.payment.ml.AlphabetDetect
-import com.getbouncer.scan.payment.ml.SSDObjectDetect
+import com.getbouncer.scan.payment.ml.ExpiryDetect
 import com.getbouncer.scan.payment.ml.SSDOcr
+import com.getbouncer.scan.payment.ml.TextDetector
 import com.getbouncer.scan.payment.ml.calculateCardFinderCoordinatesFromObjectDetection
 import com.getbouncer.scan.payment.ml.ssd.DetectionBox
 import com.getbouncer.scan.ui.DebugDetectionBox
@@ -124,7 +125,8 @@ data class CardScanActivityResult(
     val expiryYear: String?,
     val networkName: String?,
     val cvc: String?,
-    val cardholderName: String?
+    val cardholderName: String?,
+    val errorString: String?
 ) : Parcelable
 
 class CardScanActivity :
@@ -136,6 +138,7 @@ class CardScanActivity :
         private const val PARAM_DISPLAY_CARD_PAN = "displayCardPan"
         private const val PARAM_DISPLAY_CARD_SCAN_LOGO = "displayCardScanLogo"
         private const val PARAM_DISPLAY_CARDHOLDER_NAME = "displayCardholderName"
+        private const val PARAM_ENABLE_EXPIRY_EXTRACTION = "enableExpiryExtraction"
         private const val PARAM_ENABLE_NAME_EXTRACTION = "enableNameExtraction"
 
         private const val CANCELED_REASON_ENTER_MANUALLY = 3
@@ -176,6 +179,7 @@ class CardScanActivity :
             activity: Activity,
             apiKey: String,
             enableEnterCardManually: Boolean = false,
+            enableExpiryExtraction: Boolean = false,
             enableNameExtraction: Boolean = false,
             displayCardPan: Boolean = false,
             displayCardholderName: Boolean = false,
@@ -187,6 +191,7 @@ class CardScanActivity :
                     context = activity,
                     apiKey = apiKey,
                     enableEnterCardManually = enableEnterCardManually,
+                    enableExpiryExtraction = enableExpiryExtraction,
                     enableNameExtraction = enableNameExtraction,
                     displayCardPan = displayCardPan,
                     displayCardholderName = displayCardholderName,
@@ -216,6 +221,7 @@ class CardScanActivity :
             fragment: Fragment,
             apiKey: String,
             enableEnterCardManually: Boolean = false,
+            enableExpiryExtraction: Boolean = false,
             enableNameExtraction: Boolean = false,
             displayCardPan: Boolean = false,
             displayCardholderName: Boolean = false,
@@ -228,6 +234,7 @@ class CardScanActivity :
                     context = context,
                     apiKey = apiKey,
                     enableEnterCardManually = enableEnterCardManually,
+                    enableExpiryExtraction = enableExpiryExtraction,
                     enableNameExtraction = enableNameExtraction,
                     displayCardPan = displayCardPan,
                     displayCardholderName = displayCardholderName,
@@ -257,6 +264,7 @@ class CardScanActivity :
             context: Context,
             apiKey: String,
             enableEnterCardManually: Boolean = false,
+            enableExpiryExtraction: Boolean = false,
             enableNameExtraction: Boolean = false,
             displayCardPan: Boolean = false,
             displayCardholderName: Boolean = false,
@@ -269,6 +277,7 @@ class CardScanActivity :
             return Intent(context, CardScanActivity::class.java)
                 .putExtra(PARAM_DISPLAY_CARD_SCAN_LOGO, displayCardScanLogo)
                 .putExtra(PARAM_ENABLE_ENTER_MANUALLY, enableEnterCardManually)
+                .putExtra(PARAM_ENABLE_EXPIRY_EXTRACTION, enableExpiryExtraction)
                 .putExtra(PARAM_ENABLE_NAME_EXTRACTION, enableNameExtraction)
                 .putExtra(PARAM_DISPLAY_CARD_PAN, displayCardPan)
                 .putExtra(PARAM_DISPLAY_CARDHOLDER_NAME, displayCardholderName)
@@ -305,11 +314,12 @@ class CardScanActivity :
         @JvmStatic
         fun isScanResult(requestCode: Int) = REQUEST_CODE == requestCode
 
-        private val getAnalyzerPool = memoizeSuspend { context: Context, enableNameExtraction: Boolean ->
-            val nameDetect = if (enableNameExtraction) {
-                NameDetectAnalyzer.Factory(
-                    SSDObjectDetect.Factory(context, SSDObjectDetect.ModelLoader(context)),
-                    AlphabetDetect.Factory(context, AlphabetDetect.ModelLoader(context))
+        private val getAnalyzerPool = memoizeSuspend { context: Context, enableNameOrExpiryExtraction: Boolean ->
+            val nameDetect = if (enableNameOrExpiryExtraction) {
+                NameAndExpiryAnalyzer.Factory(
+                    TextDetector.Factory(context, TextDetector.ModelLoader(context)),
+                    AlphabetDetect.Factory(context, AlphabetDetect.ModelLoader(context)),
+                    ExpiryDetect.Factory(context, ExpiryDetect.ModelLoader(context))
                 )
             } else {
                 null
@@ -339,6 +349,10 @@ class CardScanActivity :
 
     private val enableNameExtraction: Boolean by lazy {
         intent.getBooleanExtra(PARAM_ENABLE_NAME_EXTRACTION, true)
+    }
+
+    private val enableExpiryExtraction: Boolean by lazy {
+        intent.getBooleanExtra(PARAM_ENABLE_EXPIRY_EXTRACTION, true)
     }
 
     private var mainLoopIsProducingResults = AtomicBoolean(false)
@@ -508,15 +522,24 @@ class CardScanActivity :
          * thread more tied up with preview than camera2 and cameraX do, and launch is allowing the
          * camera to close before suspending.
          */
+
+        // Only show the expiry dates that are not expired
+        val (expiryMonth, expiryYear) = if (result.expiry?.isValidExpiry() == true) {
+            (result.expiry.month.toString() to result.expiry.year.toString())
+        } else {
+            (null to null)
+        }
+
         cardScanned(
             CardScanActivityResult(
                 pan = result.pan,
                 networkName = getCardIssuer(result.pan).displayName,
                 expiryDay = null,
-                expiryMonth = null,
-                expiryYear = null,
+                expiryMonth = expiryMonth,
+                expiryYear = expiryYear,
                 cvc = null,
-                cardholderName = result.name
+                cardholderName = result.name,
+                errorString = result.errorString
             )
         )
     }.let { Unit }
@@ -587,7 +610,7 @@ class CardScanActivity :
         }
 
         if (isPossiblyValidPan(pan)) {
-            if (enableNameExtraction && result.analyzerResult.isNameExtractionAvailable) {
+            if ((enableNameExtraction || enableExpiryExtraction) && result.analyzerResult.isNameAndExpiryExtractionAvailable) {
                 setStateFoundLong()
             } else {
                 setStateFoundShort()
@@ -607,24 +630,27 @@ class CardScanActivity :
     override fun onCameraStreamAvailable(cameraStream: Flow<Bitmap>) {
         mainLoopResultAggregator = OcrResultAggregator(
             config = ResultAggregatorConfig.Builder()
-                .withMaxTotalAggregationTime(if (enableNameExtraction) 15.seconds else 2.seconds)
+                .withMaxTotalAggregationTime(if (enableNameExtraction || enableExpiryExtraction) 15.seconds else 2.seconds)
                 .withDefaultMaxSavedFrames(0)
                 .build(),
             listener = this,
-            requiredPanAgreementCount = 5,
-            requiredNameAgreementCount = 3,
-            isNameExtractionEnabled = enableNameExtraction
+            requiredPanAgreementCount = if (enableNameExtraction || enableExpiryExtraction) 2 else 5,
+            requiredNameAgreementCount = 2,
+            requiredExpiryAgreementCount = 3,
+            isNameExtractionEnabled = enableNameExtraction,
+            isExpiryExtractionEnabled = enableExpiryExtraction
         )
 
         // make this result aggregator pause and reset when the lifecycle pauses.
         mainLoopResultAggregator.bindToLifecycle(this)
 
         val mainLoop = ProcessBoundAnalyzerLoop(
-            analyzerPool = runBlocking { getAnalyzerPool(this@CardScanActivity.applicationContext, enableNameExtraction) },
+            analyzerPool = runBlocking { getAnalyzerPool(this@CardScanActivity.applicationContext, enableNameExtraction || enableExpiryExtraction) },
             resultHandler = mainLoopResultAggregator,
             initialState = PaymentCardOcrState(
                 runOcr = true,
-                runNameExtraction = false
+                runNameExtraction = false,
+                runExpiryExtraction = false
             ),
             name = "main_loop",
             onAnalyzerFailure = {
