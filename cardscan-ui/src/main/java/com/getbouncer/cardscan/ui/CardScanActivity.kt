@@ -391,13 +391,8 @@ class CardScanActivity :
                 "Attempting to run name and expiry without initializing text detector. " +
                         "Please invoke the warmup() function with initializeNameAndExpiryExtraction to true."
             )
-            onInvalidApiKey()
-            AlertDialog.Builder(this)
-                .setTitle("Config Problem")
-                .setMessage("Please initialize name/expiry models first in the warmup() function")
-                .setPositiveButton("Ok") { _, _ -> userCancelScan() }
-                .setCancelable(false)
-                .show()
+            cancelMainLoopAggregator()
+            showNameAndExpiryInitializationError()
         }
 
         if (enableEnterCardManually) {
@@ -519,6 +514,15 @@ class CardScanActivity :
             instructionsTextView.setText(R.string.bouncer_card_scan_instructions)
         }
         scanState = State.FOUND
+    }
+
+    private fun showNameAndExpiryInitializationError() {
+        AlertDialog.Builder(this)
+            .setTitle(com.getbouncer.scan.ui.R.string.bouncer_name_and_expiry_initialization_error)
+            .setMessage(com.getbouncer.scan.ui.R.string.bouncer_name_and_expiry_initialization_error_message)
+            .setPositiveButton(com.getbouncer.scan.ui.R.string.bouncer_name_and_expiry_initialization_error_ok) { _, _ -> userCancelScan() }
+            .setCancelable(false)
+            .show()
     }
 
     override fun prepareCamera(onCameraReady: () -> Unit) {
@@ -698,6 +702,10 @@ class CardScanActivity :
     }
 
     override fun onInvalidApiKey() {
+        cancelMainLoopAggregator()
+    }
+
+    private fun cancelMainLoopAggregator() {
         if (::mainLoopResultAggregator.isInitialized) {
             mainLoopResultAggregator.cancel()
         }
