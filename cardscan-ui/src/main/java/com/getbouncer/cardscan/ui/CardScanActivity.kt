@@ -521,9 +521,9 @@ class CardScanActivity :
 
     private fun showNameAndExpiryInitializationError() {
         AlertDialog.Builder(this)
-            .setTitle(com.getbouncer.scan.ui.R.string.bouncer_name_and_expiry_initialization_error)
-            .setMessage(com.getbouncer.scan.ui.R.string.bouncer_name_and_expiry_initialization_error_message)
-            .setPositiveButton(com.getbouncer.scan.ui.R.string.bouncer_name_and_expiry_initialization_error_ok) { _, _ -> userCancelScan() }
+            .setTitle(R.string.bouncer_name_and_expiry_initialization_error)
+            .setMessage(R.string.bouncer_name_and_expiry_initialization_error_message)
+            .setPositiveButton(R.string.bouncer_name_and_expiry_initialization_error_ok) { _, _ -> userCancelScan() }
             .setCancelable(false)
             .show()
     }
