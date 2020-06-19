@@ -390,7 +390,7 @@ class CardScanActivity :
             Log.e(
                 Config.logTag,
                 "Attempting to run name and expiry without initializing text detector. " +
-                        "Please invoke the warmup() function with initializeNameAndExpiryExtraction to true."
+                    "Please invoke the warmup() function with initializeNameAndExpiryExtraction to true."
             )
             cancelMainLoopAggregator()
             showNameAndExpiryInitializationError()
