@@ -33,7 +33,7 @@
         android:layout_width="192dp"
         android:layout_height="120dp"
         android:visibility="invisible"
-        app:layout_constraintTop_toBottomOf="@id/cardDetailsView"
+        app:layout_constraintTop_toBottomOf="@id/viewFinderWindow"
         app:layout_constraintBottom_toTopOf="@id/enterCardManuallyButtonView"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" >
@@ -90,6 +90,29 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
 
+    <ImageView
+        android:id="@+id/securityIconView"
+        android:layout_width="wrap_content"
+        android:layout_height="0dp"
+        android:contentDescription="@string/bouncer_security_description"
+        android:src="@drawable/bouncer_lock_dark"
+        android:layout_marginEnd="@dimen/bouncerSecurityIconMargin"
+        app:layout_constraintHorizontal_chainStyle="packed"
+        app:layout_constraintTop_toTopOf="@id/securityTextView"
+        app:layout_constraintBottom_toBottomOf="@id/securityTextView"
+        app:layout_constraintStart_toStartOf="@id/viewFinderWindow"
+        app:layout_constraintEnd_toStartOf="@id/securityTextView" />
+
+    <TextView
+        android:id="@+id/securityTextView"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/bouncer_card_scan_security"
+        style="@style/BouncerSecurity.Default"
+        app:layout_constraintTop_toBottomOf="@id/viewFinderWindow"
+        app:layout_constraintStart_toEndOf="@id/securityIconView"
+        app:layout_constraintEnd_toEndOf="@id/viewFinderWindow" />
+
     <TextView
         android:id="@+id/enterCardManuallyButtonView"
         android:layout_width="0dp"
@@ -107,13 +130,12 @@
         android:layout_height="wrap_content"
         android:orientation="vertical"
         android:layout_gravity="center_horizontal"
-        android:layout_marginTop="@dimen/bouncerCardDetailsMargin"
-        android:layout_marginBottom="@dimen/bouncerCardDetailsMargin"
         android:layout_marginStart="@dimen/bouncerCardDetailsMargin"
         android:layout_marginEnd="@dimen/bouncerCardDetailsMargin"
-        app:layout_constraintTop_toBottomOf="@id/viewFinderWindow"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" >
+        app:layout_constraintTop_toTopOf="@id/viewFinderWindow"
+        app:layout_constraintBottom_toBottomOf="@id/viewFinderWindow"
+        app:layout_constraintStart_toStartOf="@id/viewFinderWindow"
+        app:layout_constraintEnd_toEndOf="@id/viewFinderWindow" >
 
         <TextView
             android:id="@+id/cardPanTextView"
@@ -128,7 +150,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginBottom="8dp"
-            android:visibility="gone" />
+            android:visibility="invisible" />
 
     </LinearLayout>
 

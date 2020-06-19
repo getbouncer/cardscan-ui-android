@@ -60,6 +60,7 @@ import kotlinx.android.synthetic.main.bouncer_activity_card_scan.debugWindowView
 import kotlinx.android.synthetic.main.bouncer_activity_card_scan.enterCardManuallyButtonView
 import kotlinx.android.synthetic.main.bouncer_activity_card_scan.flashButtonView
 import kotlinx.android.synthetic.main.bouncer_activity_card_scan.instructionsTextView
+import kotlinx.android.synthetic.main.bouncer_activity_card_scan.securityTextView
 import kotlinx.android.synthetic.main.bouncer_activity_card_scan.viewFinderBackground
 import kotlinx.android.synthetic.main.bouncer_activity_card_scan.viewFinderBorder
 import kotlinx.android.synthetic.main.bouncer_activity_card_scan.viewFinderWindow
@@ -184,8 +185,8 @@ class CardScanActivity :
             enableEnterCardManually: Boolean = false,
             enableExpiryExtraction: Boolean = false,
             enableNameExtraction: Boolean = false,
-            displayCardPan: Boolean = false,
-            displayCardholderName: Boolean = false,
+            displayCardPan: Boolean = true,
+            displayCardholderName: Boolean = true,
             displayCardScanLogo: Boolean = true,
             enableDebug: Boolean = Config.isDebug
         ) {
@@ -448,6 +449,7 @@ class CardScanActivity :
             flashButtonView.setImageResource(R.drawable.bouncer_flash_off_dark)
         }
         instructionsTextView.setTextColor(ContextCompat.getColor(this, R.color.bouncerInstructionsColorDark))
+        securityTextView.setTextColor(ContextCompat.getColor(this, R.color.bouncerSecurityColorDark))
         enterCardManuallyButtonView.setTextColor(ContextCompat.getColor(this, R.color.bouncerEnterCardManuallyColorDark))
         closeButtonView.setImageResource(R.drawable.bouncer_close_button_dark)
         cardscanLogo.setImageResource(R.drawable.bouncer_logo_dark_background)
@@ -460,6 +462,7 @@ class CardScanActivity :
             flashButtonView.setImageResource(R.drawable.bouncer_flash_off_light)
         }
         instructionsTextView.setTextColor(ContextCompat.getColor(this, R.color.bouncerInstructionsColorLight))
+        securityTextView.setTextColor(ContextCompat.getColor(this, R.color.bouncerSecurityColorLight))
         enterCardManuallyButtonView.setTextColor(ContextCompat.getColor(this, R.color.bouncerEnterCardManuallyColorLight))
         closeButtonView.setImageResource(R.drawable.bouncer_close_button_light)
         cardscanLogo.setImageResource(R.drawable.bouncer_logo_light_background)
