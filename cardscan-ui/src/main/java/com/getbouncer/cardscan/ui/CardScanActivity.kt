@@ -14,6 +14,7 @@ import android.util.Size
 import android.view.View
 import android.widget.FrameLayout
 import androidx.annotation.DrawableRes
+import androidx.appcompat.app.AlertDialog
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import com.getbouncer.cardscan.ui.result.OcrResultAggregator
@@ -146,6 +147,8 @@ class CardScanActivity :
 
         private const val RESULT_SCANNED_CARD = "scannedCard"
 
+        private var attemptedNameAndExpiryInitialization = false
+
         /**
          * Warm up the analyzers for card scanner. This method is optional, but will increase the
          * speed at which the scan occurs.
@@ -153,11 +156,11 @@ class CardScanActivity :
          * @param context: A context to use for warming up the analyzers.
          */
         @JvmStatic
-        fun initializeNameExtraction(context: Context, apiKey: String) {
+        fun warmup(context: Context, apiKey: String, initializeNameAndExpiryExtraction: Boolean) {
             Config.apiKey = apiKey
 
             GlobalScope.launch(Dispatchers.Default) {
-                getAnalyzerPool(context.applicationContext, true)
+                getAnalyzerPool(context.applicationContext, initializeNameAndExpiryExtraction)
             }
         }
 
@@ -317,6 +320,7 @@ class CardScanActivity :
 
         private val getAnalyzerPool = memoizeSuspend { context: Context, enableNameOrExpiryExtraction: Boolean ->
             val nameDetect = if (enableNameOrExpiryExtraction) {
+                attemptedNameAndExpiryInitialization = true
                 NameAndExpiryAnalyzer.Factory(
                     TextDetector.Factory(context, TextDetector.ModelLoader(context)),
                     AlphabetDetect.Factory(context, AlphabetDetect.ModelLoader(context)),
@@ -381,6 +385,16 @@ class CardScanActivity :
     @SuppressLint("ClickableViewAccessibility")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        if (!attemptedNameAndExpiryInitialization && (enableExpiryExtraction || enableNameExtraction)) {
+            Log.e(
+                Config.logTag,
+                "Attempting to run name and expiry without initializing text detector. " +
+                    "Please invoke the warmup() function with initializeNameAndExpiryExtraction to true."
+            )
+            cancelMainLoopAggregator()
+            showNameAndExpiryInitializationError()
+        }
 
         if (enableEnterCardManually) {
             enterCardManuallyButtonView.visibility = View.VISIBLE
@@ -503,6 +517,15 @@ class CardScanActivity :
             instructionsTextView.setText(R.string.bouncer_card_scan_instructions)
         }
         scanState = State.FOUND
+    }
+
+    private fun showNameAndExpiryInitializationError() {
+        AlertDialog.Builder(this)
+            .setTitle(R.string.bouncer_name_and_expiry_initialization_error)
+            .setMessage(R.string.bouncer_name_and_expiry_initialization_error_message)
+            .setPositiveButton(R.string.bouncer_name_and_expiry_initialization_error_ok) { _, _ -> userCancelScan() }
+            .setCancelable(false)
+            .show()
     }
 
     override fun prepareCamera(onCameraReady: () -> Unit) {
@@ -648,7 +671,7 @@ class CardScanActivity :
         mainLoopResultAggregator.bindToLifecycle(this)
 
         val mainLoop = ProcessBoundAnalyzerLoop(
-            analyzerPool = runBlocking { getAnalyzerPool(this@CardScanActivity.applicationContext, enableNameExtraction || enableExpiryExtraction) },
+            analyzerPool = runBlocking { getAnalyzerPool(this@CardScanActivity.applicationContext, attemptedNameAndExpiryInitialization) },
             resultHandler = mainLoopResultAggregator,
             initialState = PaymentCardOcrState(
                 runOcr = true,
@@ -682,6 +705,10 @@ class CardScanActivity :
     }
 
     override fun onInvalidApiKey() {
+        cancelMainLoopAggregator()
+    }
+
+    private fun cancelMainLoopAggregator() {
         if (::mainLoopResultAggregator.isInitialized) {
             mainLoopResultAggregator.cancel()
         }
