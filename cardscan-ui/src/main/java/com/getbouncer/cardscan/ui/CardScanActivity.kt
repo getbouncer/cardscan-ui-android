@@ -138,8 +138,6 @@ class CardScanActivity :
 
         private const val RESULT_SCANNED_CARD = "scannedCard"
 
-        private var attemptedNameAndExpiryInitialization = false
-
         /**
          * Warm up the analyzers for card scanner. This method is optional, but will increase the
          * speed at which the scan occurs.
@@ -304,26 +302,6 @@ class CardScanActivity :
          */
         @JvmStatic
         fun isScanResult(requestCode: Int) = REQUEST_CODE == requestCode
-<<<<<<< HEAD
-
-        private val getAnalyzerPool = memoizeSuspend { context: Context, enableNameOrExpiryExtraction: Boolean ->
-            val nameDetect = if (enableNameOrExpiryExtraction) {
-                attemptedNameAndExpiryInitialization = true
-                NameAndExpiryAnalyzer.Factory(
-                    TextDetector.Factory(context, TextDetector.ModelLoader(context)),
-                    AlphabetDetect.Factory(context, AlphabetDetect.ModelLoader(context)),
-                    ExpiryDetect.Factory(context, ExpiryDetect.ModelLoader(context))
-                )
-            } else {
-                null
-            }
-
-            AnalyzerPoolFactory(
-                PaymentCardOcrAnalyzer.Factory(SSDOcr.Factory(context, SSDOcr.ModelLoader(context)), nameDetect)
-            ).buildAnalyzerPool()
-        }
-=======
->>>>>>> Separate loop logic
     }
 
     private val enableEnterCardManually: Boolean by lazy {
@@ -354,7 +332,9 @@ class CardScanActivity :
     private val hasPreviousValidResult = AtomicBoolean(false)
     private var lastDebugFrameUpdate = Clock.markNow()
 
-    private var cardScanFlow: CardScanFlow? = null
+    private val cardScanFlow: CardScanFlow by lazy {
+        CardScanFlow(enableNameExtraction, enableExpiryExtraction, this, this)
+    }
 
     private val viewFinderRect by lazy {
         Rect(
@@ -376,13 +356,13 @@ class CardScanActivity :
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        if (!attemptedNameAndExpiryInitialization && (enableExpiryExtraction || enableNameExtraction)) {
+        if (!CardScanFlow.attemptedNameAndExpiryInitialization && (enableExpiryExtraction || enableNameExtraction)) {
             Log.e(
                 Config.logTag,
                 "Attempting to run name and expiry without initializing text detector. " +
                     "Please invoke the warmup() function with initializeNameAndExpiryExtraction to true."
             )
-            cancelMainLoopAggregator()
+            cardScanFlow.cancelFlow()
             showNameAndExpiryInitializationError()
         }
 
@@ -654,65 +634,17 @@ class CardScanActivity :
      * Once the camera stream is available, start processing images.
      */
     override fun onCameraStreamAvailable(cameraStream: Flow<Bitmap>) {
-<<<<<<< HEAD
-        mainLoopResultAggregator = OcrResultAggregator(
-            config = ResultAggregatorConfig.Builder()
-                .withMaxTotalAggregationTime(if (enableNameExtraction || enableExpiryExtraction) 15.seconds else 2.seconds)
-                .withDefaultMaxSavedFrames(0)
-                .build(),
-            listener = this,
-            requiredPanAgreementCount = if (enableNameExtraction || enableExpiryExtraction) 2 else 5,
-            requiredNameAgreementCount = 2,
-            requiredExpiryAgreementCount = 3,
-            isNameExtractionEnabled = enableNameExtraction,
-            isExpiryExtractionEnabled = enableExpiryExtraction
-        )
-
-        // make this result aggregator pause and reset when the lifecycle pauses.
-        mainLoopResultAggregator.bindToLifecycle(this)
-
-        val mainLoop = ProcessBoundAnalyzerLoop(
-            analyzerPool = runBlocking { getAnalyzerPool(this@CardScanActivity.applicationContext, attemptedNameAndExpiryInitialization) },
-            resultHandler = mainLoopResultAggregator,
-            initialState = PaymentCardOcrState(
-                runOcr = true,
-                runNameExtraction = false,
-                runExpiryExtraction = false
-            ),
-            name = "main_loop",
-            onAnalyzerFailure = {
-                analyzerFailureCancelScan(it)
-                true // terminate the loop on any analyzer failures
-            },
-            onResultFailure = {
-                analyzerFailureCancelScan(it)
-                true // terminate the loop on any result failures
-            }
-=======
-        val flow = CardScanFlow(enableNameExtraction, enableExpiryExtraction, this, this)
-        flow.startFlow(
+        cardScanFlow.startFlow(
             context = this,
             imageStream = cameraStream,
             previewSize = Size(previewFrame.width, previewFrame.height),
             viewFinder = viewFinderRect,
             lifecycleOwner = this,
             coroutineScope = this
->>>>>>> Separate loop logic
         )
-        cardScanFlow = flow
     }
 
     override fun onInvalidApiKey() {
-<<<<<<< HEAD
-        cancelMainLoopAggregator()
-    }
-
-    private fun cancelMainLoopAggregator() {
-        if (::mainLoopResultAggregator.isInitialized) {
-            mainLoopResultAggregator.cancel()
-        }
-=======
-        cardScanFlow?.cancelFlow()
->>>>>>> Separate loop logic
+        cardScanFlow.cancelFlow()
     }
 }

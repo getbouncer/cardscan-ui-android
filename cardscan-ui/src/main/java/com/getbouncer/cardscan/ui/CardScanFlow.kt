@@ -44,6 +44,12 @@ class CardScanFlow(
     companion object {
 
         /**
+         * This field represents whether the flow was initialized with name and expiry enabled.
+         */
+        var attemptedNameAndExpiryInitialization = false
+            private set
+
+        /**
          * Warm up the analyzers for card scanner. This method is optional, but will increase the
          * speed at which the scan occurs.
          *
@@ -60,6 +66,7 @@ class CardScanFlow(
 
         private val getAnalyzerPool = cacheFirstResultSuspend { context: Context, enableNameOrExpiryExtraction: Boolean ->
             val nameDetect = if (enableNameOrExpiryExtraction) {
+                attemptedNameAndExpiryInitialization = true
                 NameAndExpiryAnalyzer.Factory(
                     TextDetector.Factory(context, TextDetector.ModelLoader(context)),
                     AlphabetDetect.Factory(context, AlphabetDetect.ModelLoader(context)),
@@ -74,6 +81,11 @@ class CardScanFlow(
             ).buildAnalyzerPool()
         }
     }
+
+    /**
+     * If this is true, do not start the flow.
+     */
+    private var canceled = false
 
     private lateinit var mainLoopResultAggregator: OcrResultAggregator
 
@@ -92,6 +104,10 @@ class CardScanFlow(
         lifecycleOwner: LifecycleOwner,
         coroutineScope: CoroutineScope
     ) {
+        if (canceled) {
+            return
+        }
+
         mainLoopResultAggregator = OcrResultAggregator(
             config = ResultAggregatorConfig.Builder()
                 .withMaxTotalAggregationTime(if (enableNameExtraction || enableExpiryExtraction) 15.seconds else 2.seconds)
@@ -114,7 +130,7 @@ class CardScanFlow(
         mainLoopResultAggregator.bindToLifecycle(lifecycleOwner)
 
         val mainLoop = ProcessBoundAnalyzerLoop(
-            analyzerPool = runBlocking { getAnalyzerPool(context, enableNameExtraction || enableExpiryExtraction) },
+            analyzerPool = runBlocking { getAnalyzerPool(context, attemptedNameAndExpiryInitialization) },
             resultHandler = mainLoopResultAggregator,
             name = "main_loop",
             analyzerLoopErrorListener = errorListener
@@ -139,6 +155,7 @@ class CardScanFlow(
      * In the event that the scan cannot complete, halt the flow to halt analyzers and free up CPU and memory.
      */
     fun cancelFlow() {
+        canceled = true
         if (::mainLoopResultAggregator.isInitialized) {
             mainLoopResultAggregator.cancel()
         }
