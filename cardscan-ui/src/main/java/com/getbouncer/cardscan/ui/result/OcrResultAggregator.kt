@@ -4,8 +4,8 @@ import com.getbouncer.scan.framework.AggregateResultListener
 import com.getbouncer.scan.framework.ResultAggregator
 import com.getbouncer.scan.framework.ResultAggregatorConfig
 import com.getbouncer.scan.framework.ResultCounter
-import com.getbouncer.scan.payment.analyzer.PaymentCardOcrAnalyzer
-import com.getbouncer.scan.payment.analyzer.PaymentCardOcrState
+import com.getbouncer.cardscan.ui.analyzer.PaymentCardOcrAnalyzer
+import com.getbouncer.cardscan.ui.analyzer.PaymentCardOcrState
 import com.getbouncer.scan.payment.card.isValidPan
 import com.getbouncer.scan.payment.ml.ExpiryDetect
 import com.getbouncer.scan.payment.ml.SSDOcr

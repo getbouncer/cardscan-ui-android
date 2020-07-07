@@ -16,9 +16,9 @@ import com.getbouncer.scan.framework.ResultAggregatorConfig
 import com.getbouncer.scan.framework.time.Clock
 import com.getbouncer.scan.framework.time.seconds
 import com.getbouncer.scan.framework.util.cacheFirstResultSuspend
-import com.getbouncer.scan.payment.analyzer.NameAndExpiryAnalyzer
-import com.getbouncer.scan.payment.analyzer.PaymentCardOcrAnalyzer
-import com.getbouncer.scan.payment.analyzer.PaymentCardOcrState
+import com.getbouncer.cardscan.ui.analyzer.NameAndExpiryAnalyzer
+import com.getbouncer.cardscan.ui.analyzer.PaymentCardOcrAnalyzer
+import com.getbouncer.cardscan.ui.analyzer.PaymentCardOcrState
 import com.getbouncer.scan.payment.ml.AlphabetDetect
 import com.getbouncer.scan.payment.ml.ExpiryDetect
 import com.getbouncer.scan.payment.ml.SSDOcr
