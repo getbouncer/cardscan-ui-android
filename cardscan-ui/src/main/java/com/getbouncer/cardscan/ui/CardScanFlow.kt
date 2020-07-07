@@ -15,7 +15,7 @@ import com.getbouncer.scan.framework.ProcessBoundAnalyzerLoop
 import com.getbouncer.scan.framework.ResultAggregatorConfig
 import com.getbouncer.scan.framework.time.Clock
 import com.getbouncer.scan.framework.time.seconds
-import com.getbouncer.scan.framework.util.memoizeSuspend
+import com.getbouncer.scan.framework.util.cacheFirstResultSuspend
 import com.getbouncer.scan.payment.analyzer.NameAndExpiryAnalyzer
 import com.getbouncer.scan.payment.analyzer.PaymentCardOcrAnalyzer
 import com.getbouncer.scan.payment.analyzer.PaymentCardOcrState
@@ -54,11 +54,11 @@ class CardScanFlow(
             Config.apiKey = apiKey
 
             GlobalScope.launch(Dispatchers.Default) {
-                getAnalyzerPool(context.applicationContext, initializeNameAndExpiryExtraction)
+                getAnalyzerPool(context, initializeNameAndExpiryExtraction)
             }
         }
 
-        private val getAnalyzerPool = memoizeSuspend { context: Context, enableNameOrExpiryExtraction: Boolean ->
+        private val getAnalyzerPool = cacheFirstResultSuspend { context: Context, enableNameOrExpiryExtraction: Boolean ->
             val nameDetect = if (enableNameOrExpiryExtraction) {
                 NameAndExpiryAnalyzer.Factory(
                     TextDetector.Factory(context, TextDetector.ModelLoader(context)),
@@ -102,20 +102,20 @@ class CardScanFlow(
             requiredNameAgreementCount = 2,
             requiredExpiryAgreementCount = 3,
             isNameExtractionEnabled = enableNameExtraction,
-            isExpiryExtractionEnabled = enableExpiryExtraction
+            isExpiryExtractionEnabled = enableExpiryExtraction,
+            initialState = PaymentCardOcrState(
+                runOcr = true,
+                runNameExtraction = false,
+                runExpiryExtraction = false
+            )
         )
 
         // make this result aggregator pause and reset when the lifecycle pauses.
         mainLoopResultAggregator.bindToLifecycle(lifecycleOwner)
 
         val mainLoop = ProcessBoundAnalyzerLoop(
-            analyzerPool = runBlocking { getAnalyzerPool(context.applicationContext, enableNameExtraction || enableExpiryExtraction) },
+            analyzerPool = runBlocking { getAnalyzerPool(context, enableNameExtraction || enableExpiryExtraction) },
             resultHandler = mainLoopResultAggregator,
-            initialState = PaymentCardOcrState(
-                runOcr = true,
-                runNameExtraction = false,
-                runExpiryExtraction = false
-            ),
             name = "main_loop",
             analyzerLoopErrorListener = errorListener
         )
