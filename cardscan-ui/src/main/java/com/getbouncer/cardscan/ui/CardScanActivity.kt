@@ -27,7 +27,7 @@ import com.getbouncer.scan.framework.SavedFrame
 import com.getbouncer.scan.framework.time.Clock
 import com.getbouncer.scan.framework.time.Duration
 import com.getbouncer.scan.framework.time.seconds
-import com.getbouncer.scan.framework.util.memoizeSuspend
+import com.getbouncer.scan.framework.util.cacheResultSuspend
 import com.getbouncer.scan.payment.analyzer.NameAndExpiryAnalyzer
 import com.getbouncer.scan.payment.analyzer.PaymentCardOcrAnalyzer
 import com.getbouncer.scan.payment.analyzer.PaymentCardOcrState
@@ -130,7 +130,10 @@ data class CardScanActivityResult(
     val errorString: String?
 ) : Parcelable
 
-class CardScanActivity :
+/**
+ * An activity to scan cards.
+ */
+open class CardScanActivity :
     ScanActivity(),
     AggregateResultListener<SSDOcr.Input, PaymentCardOcrState, OcrResultAggregator.InterimResult, PaymentCardOcrResult> {
 
@@ -157,7 +160,7 @@ class CardScanActivity :
             Config.apiKey = apiKey
 
             GlobalScope.launch(Dispatchers.Default) {
-                getAnalyzerPool(context.applicationContext, true)
+                getAnalyzerPool(context, true, false)
             }
         }
 
@@ -315,7 +318,10 @@ class CardScanActivity :
         @JvmStatic
         fun isScanResult(requestCode: Int) = REQUEST_CODE == requestCode
 
-        private val getAnalyzerPool = memoizeSuspend { context: Context, enableNameOrExpiryExtraction: Boolean ->
+        private val getAnalyzerPool = cacheResultSuspend {
+                context: Context,
+                enableNameOrExpiryExtraction: Boolean,
+                criticalPath: Boolean ->
             val nameDetect = if (enableNameOrExpiryExtraction) {
                 NameAndExpiryAnalyzer.Factory(
                     TextDetector.Factory(context, TextDetector.ModelLoader(context)),
@@ -328,7 +334,7 @@ class CardScanActivity :
 
             AnalyzerPoolFactory(
                 PaymentCardOcrAnalyzer.Factory(SSDOcr.Factory(context, SSDOcr.ModelLoader(context)), nameDetect)
-            ).buildAnalyzerPool()
+            ).buildAnalyzerPool(criticalPath)
         }
     }
 
@@ -648,7 +654,7 @@ class CardScanActivity :
         mainLoopResultAggregator.bindToLifecycle(this)
 
         val mainLoop = ProcessBoundAnalyzerLoop(
-            analyzerPool = runBlocking { getAnalyzerPool(this@CardScanActivity.applicationContext, enableNameExtraction || enableExpiryExtraction) },
+            analyzerPool = runBlocking { getAnalyzerPool(this@CardScanActivity, enableNameExtraction || enableExpiryExtraction, true) },
             resultHandler = mainLoopResultAggregator,
             initialState = PaymentCardOcrState(
                 runOcr = true,
