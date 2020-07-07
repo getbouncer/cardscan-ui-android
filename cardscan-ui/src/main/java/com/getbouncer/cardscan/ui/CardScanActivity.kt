@@ -17,6 +17,7 @@ import androidx.annotation.DrawableRes
 import androidx.appcompat.app.AlertDialog
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
+import com.getbouncer.cardscan.ui.analyzer.PaymentCardOcrState
 import com.getbouncer.cardscan.ui.result.OcrResultAggregator
 import com.getbouncer.cardscan.ui.result.PaymentCardOcrResult
 import com.getbouncer.scan.framework.AggregateResultListener
@@ -26,7 +27,6 @@ import com.getbouncer.scan.framework.SavedFrame
 import com.getbouncer.scan.framework.time.Clock
 import com.getbouncer.scan.framework.time.Duration
 import com.getbouncer.scan.framework.time.seconds
-import com.getbouncer.cardscan.ui.analyzer.PaymentCardOcrState
 import com.getbouncer.scan.payment.card.formatPan
 import com.getbouncer.scan.payment.card.getCardIssuer
 import com.getbouncer.scan.payment.card.isPossiblyValidPan
