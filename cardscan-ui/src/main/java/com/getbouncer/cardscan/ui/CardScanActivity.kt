@@ -20,25 +20,17 @@ import androidx.fragment.app.Fragment
 import com.getbouncer.cardscan.ui.result.OcrResultAggregator
 import com.getbouncer.cardscan.ui.result.PaymentCardOcrResult
 import com.getbouncer.scan.framework.AggregateResultListener
-import com.getbouncer.scan.framework.AnalyzerPoolFactory
+import com.getbouncer.scan.framework.AnalyzerLoopErrorListener
 import com.getbouncer.scan.framework.Config
-import com.getbouncer.scan.framework.ProcessBoundAnalyzerLoop
-import com.getbouncer.scan.framework.ResultAggregatorConfig
 import com.getbouncer.scan.framework.SavedFrame
 import com.getbouncer.scan.framework.time.Clock
 import com.getbouncer.scan.framework.time.Duration
 import com.getbouncer.scan.framework.time.seconds
-import com.getbouncer.scan.framework.util.memoizeSuspend
-import com.getbouncer.scan.payment.analyzer.NameAndExpiryAnalyzer
-import com.getbouncer.scan.payment.analyzer.PaymentCardOcrAnalyzer
 import com.getbouncer.scan.payment.analyzer.PaymentCardOcrState
 import com.getbouncer.scan.payment.card.formatPan
 import com.getbouncer.scan.payment.card.getCardIssuer
 import com.getbouncer.scan.payment.card.isPossiblyValidPan
-import com.getbouncer.scan.payment.ml.AlphabetDetect
-import com.getbouncer.scan.payment.ml.ExpiryDetect
 import com.getbouncer.scan.payment.ml.SSDOcr
-import com.getbouncer.scan.payment.ml.TextDetector
 import com.getbouncer.scan.payment.ml.calculateCardFinderCoordinatesFromObjectDetection
 import com.getbouncer.scan.payment.ml.ssd.DetectionBox
 import com.getbouncer.scan.ui.DebugDetectionBox
@@ -65,9 +57,7 @@ import kotlinx.android.synthetic.main.bouncer_activity_card_scan.viewFinderBackg
 import kotlinx.android.synthetic.main.bouncer_activity_card_scan.viewFinderBorder
 import kotlinx.android.synthetic.main.bouncer_activity_card_scan.viewFinderWindow
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
@@ -133,7 +123,8 @@ data class CardScanActivityResult(
 
 class CardScanActivity :
     ScanActivity(),
-    AggregateResultListener<SSDOcr.Input, PaymentCardOcrState, OcrResultAggregator.InterimResult, PaymentCardOcrResult> {
+    AggregateResultListener<SSDOcr.Input, PaymentCardOcrState, OcrResultAggregator.InterimResult, PaymentCardOcrResult>,
+    AnalyzerLoopErrorListener {
 
     companion object {
         private const val PARAM_ENABLE_ENTER_MANUALLY = "enableEnterManually"
@@ -156,12 +147,8 @@ class CardScanActivity :
          * @param context: A context to use for warming up the analyzers.
          */
         @JvmStatic
-        fun warmup(context: Context, apiKey: String, initializeNameAndExpiryExtraction: Boolean) {
-            Config.apiKey = apiKey
-
-            GlobalScope.launch(Dispatchers.Default) {
-                getAnalyzerPool(context.applicationContext, initializeNameAndExpiryExtraction)
-            }
+        fun warmUp(context: Context, apiKey: String, initializeNameAndExpiryExtraction: Boolean) {
+            CardScanFlow.warmUp(context, apiKey, initializeNameAndExpiryExtraction)
         }
 
         /**
@@ -317,6 +304,7 @@ class CardScanActivity :
          */
         @JvmStatic
         fun isScanResult(requestCode: Int) = REQUEST_CODE == requestCode
+<<<<<<< HEAD
 
         private val getAnalyzerPool = memoizeSuspend { context: Context, enableNameOrExpiryExtraction: Boolean ->
             val nameDetect = if (enableNameOrExpiryExtraction) {
@@ -334,6 +322,8 @@ class CardScanActivity :
                 PaymentCardOcrAnalyzer.Factory(SSDOcr.Factory(context, SSDOcr.ModelLoader(context)), nameDetect)
             ).buildAnalyzerPool()
         }
+=======
+>>>>>>> Separate loop logic
     }
 
     private val enableEnterCardManually: Boolean by lazy {
@@ -364,7 +354,7 @@ class CardScanActivity :
     private val hasPreviousValidResult = AtomicBoolean(false)
     private var lastDebugFrameUpdate = Clock.markNow()
 
-    private lateinit var mainLoopResultAggregator: OcrResultAggregator
+    private var cardScanFlow: CardScanFlow? = null
 
     private val viewFinderRect by lazy {
         Rect(
@@ -648,12 +638,23 @@ class CardScanActivity :
 
     override suspend fun onReset() = launch(Dispatchers.Main) { setStateNotFound() }.let { Unit }
 
+    override fun onAnalyzerFailure(t: Throwable): Boolean {
+        analyzerFailureCancelScan(t)
+        return true
+    }
+
+    override fun onResultFailure(t: Throwable): Boolean {
+        analyzerFailureCancelScan(t)
+        return true
+    }
+
     override fun getLayoutRes(): Int = R.layout.bouncer_activity_card_scan
 
     /**
      * Once the camera stream is available, start processing images.
      */
     override fun onCameraStreamAvailable(cameraStream: Flow<Bitmap>) {
+<<<<<<< HEAD
         mainLoopResultAggregator = OcrResultAggregator(
             config = ResultAggregatorConfig.Builder()
                 .withMaxTotalAggregationTime(if (enableNameExtraction || enableExpiryExtraction) 15.seconds else 2.seconds)
@@ -687,24 +688,22 @@ class CardScanActivity :
                 analyzerFailureCancelScan(it)
                 true // terminate the loop on any result failures
             }
+=======
+        val flow = CardScanFlow(enableNameExtraction, enableExpiryExtraction, this, this)
+        flow.startFlow(
+            context = this,
+            imageStream = cameraStream,
+            previewSize = Size(previewFrame.width, previewFrame.height),
+            viewFinder = viewFinderRect,
+            lifecycleOwner = this,
+            coroutineScope = this
+>>>>>>> Separate loop logic
         )
-
-        launch(Dispatchers.Default) {
-            mainLoop.subscribeTo(
-                flow = cameraStream.map {
-                    SSDOcr.Input(
-                        fullImage = it,
-                        previewSize = Size(previewFrame.width, previewFrame.height),
-                        cardFinder = viewFinderRect,
-                        capturedAt = Clock.markNow()
-                    )
-                },
-                processingCoroutineScope = this
-            )
-        }
+        cardScanFlow = flow
     }
 
     override fun onInvalidApiKey() {
+<<<<<<< HEAD
         cancelMainLoopAggregator()
     }
 
@@ -712,5 +711,8 @@ class CardScanActivity :
         if (::mainLoopResultAggregator.isInitialized) {
             mainLoopResultAggregator.cancel()
         }
+=======
+        cardScanFlow?.cancelFlow()
+>>>>>>> Separate loop logic
     }
 }
