@@ -1,14 +1,15 @@
 package com.getbouncer.cardscan.ui.result
 
+import com.getbouncer.cardscan.ui.analyzer.PaymentCardOcrAnalyzer
+import com.getbouncer.cardscan.ui.analyzer.PaymentCardOcrState
 import com.getbouncer.scan.framework.AggregateResultListener
 import com.getbouncer.scan.framework.ResultAggregator
 import com.getbouncer.scan.framework.ResultAggregatorConfig
 import com.getbouncer.scan.framework.ResultCounter
-import com.getbouncer.scan.payment.analyzer.PaymentCardOcrAnalyzer
-import com.getbouncer.scan.payment.analyzer.PaymentCardOcrState
 import com.getbouncer.scan.payment.card.isValidPan
 import com.getbouncer.scan.payment.ml.ExpiryDetect
 import com.getbouncer.scan.payment.ml.SSDOcr
+import kotlinx.coroutines.runBlocking
 
 data class PaymentCardOcrResult(
     val pan: String?,
@@ -32,10 +33,12 @@ class OcrResultAggregator(
     private val requiredNameAgreementCount: Int? = null,
     private val requiredExpiryAgreementCount: Int? = null,
     private val isNameExtractionEnabled: Boolean = false,
-    private val isExpiryExtractionEnabled: Boolean = false
+    private val isExpiryExtractionEnabled: Boolean = false,
+    initialState: PaymentCardOcrState
 ) : ResultAggregator<SSDOcr.Input, PaymentCardOcrState, PaymentCardOcrAnalyzer.Prediction, OcrResultAggregator.InterimResult, PaymentCardOcrResult>(
     config = config,
-    listener = listener
+    listener = listener,
+    initialState = initialState
 ) {
 
     data class InterimResult(
@@ -59,18 +62,18 @@ class OcrResultAggregator(
     private var isNameFound: Boolean = false
     private var isExpiryFound: Boolean = false
 
-    override suspend fun reset() {
+    override fun reset() {
         super.reset()
-        panResults.reset()
-        nameResults.reset()
+        runBlocking {
+            panResults.reset()
+            nameResults.reset()
+        }
     }
 
     override suspend fun aggregateResult(
         result: PaymentCardOcrAnalyzer.Prediction,
-        state: PaymentCardOcrState,
         startAggregationTimer: () -> Unit,
-        mustReturnFinal: Boolean,
-        updateState: (PaymentCardOcrState) -> Unit
+        mustReturnFinal: Boolean
     ): Pair<InterimResult, PaymentCardOcrResult?> {
 
         val interimResult = InterimResult(
@@ -80,7 +83,7 @@ class OcrResultAggregator(
             hasValidPan = isValidPan(result.pan)
         )
 
-        updatePanState(result, state, startAggregationTimer, updateState)
+        updatePanState(result, startAggregationTimer)
         updateNameState(result.name)
         updateExpiryState(result.expiry)
 
@@ -113,9 +116,7 @@ class OcrResultAggregator(
 
     private suspend fun updatePanState(
         result: PaymentCardOcrAnalyzer.Prediction,
-        state: PaymentCardOcrState,
-        startAggregationTimer: () -> Unit,
-        updateState: (PaymentCardOcrState) -> Unit
+        startAggregationTimer: () -> Unit
     ) {
         val pan = result.pan
         val numberCount = if (pan != null && isValidPan(result.pan)) {
@@ -125,12 +126,10 @@ class OcrResultAggregator(
 
         if (requiredPanAgreementCount != null && numberCount >= requiredPanAgreementCount) {
             isPanScanningComplete = true
-            updateState(
-                state.copy(
-                    runOcr = false,
-                    runNameExtraction = isNameExtractionEnabled,
-                    runExpiryExtraction = isExpiryExtractionEnabled
-                )
+            state = state.copy(
+                runOcr = false,
+                runNameExtraction = isNameExtractionEnabled,
+                runExpiryExtraction = isExpiryExtractionEnabled
             )
         }
     }
