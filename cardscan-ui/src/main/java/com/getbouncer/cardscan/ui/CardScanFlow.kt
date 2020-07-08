@@ -26,6 +26,7 @@ import com.getbouncer.scan.payment.ml.TextDetector
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -88,6 +89,7 @@ class CardScanFlow(
     private var canceled = false
 
     private lateinit var mainLoopResultAggregator: OcrResultAggregator
+    private var mainLoopJob: Job? = null
 
     /**
      * Start the image processing flow for scanning a card.
@@ -136,19 +138,17 @@ class CardScanFlow(
             analyzerLoopErrorListener = errorListener
         )
 
-        coroutineScope.launch(Dispatchers.Default) {
-            mainLoop.subscribeTo(
-                flow = imageStream.map {
-                    SSDOcr.Input(
-                        fullImage = it,
-                        previewSize = previewSize,
-                        cardFinder = viewFinder,
-                        capturedAt = Clock.markNow()
-                    )
-                },
-                processingCoroutineScope = this
-            )
-        }
+        mainLoop.subscribeTo(
+            flow = imageStream.map {
+                SSDOcr.Input(
+                    fullImage = it,
+                    previewSize = previewSize,
+                    cardFinder = viewFinder,
+                    capturedAt = Clock.markNow()
+                )
+            },
+            processingCoroutineScope = coroutineScope
+        )
     }
 
     /**
@@ -159,5 +159,7 @@ class CardScanFlow(
         if (::mainLoopResultAggregator.isInitialized) {
             mainLoopResultAggregator.cancel()
         }
+
+        mainLoopJob?.apply { if (isActive) { cancel() } }
     }
 }
