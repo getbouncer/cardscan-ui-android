@@ -391,6 +391,11 @@ class CardScanActivity :
         }
     }
 
+    override fun onDestroy() {
+        super.onDestroy()
+        cardScanFlow.cancelFlow()
+    }
+
     override fun onFlashlightStateChanged(flashlightOn: Boolean) {
         updateIcons()
     }
