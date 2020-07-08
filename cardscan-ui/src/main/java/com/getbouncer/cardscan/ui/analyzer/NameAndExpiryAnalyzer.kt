@@ -68,9 +68,12 @@ class NameAndExpiryAnalyzer private constructor(
             ),
             Unit
         )
+
         val expiry = if (state.runExpiryExtraction && textDetectorPrediction.expiryBoxes.isNotEmpty()) {
             // pick the expiry box by oldest date
-            val parsedExpiries = textDetectorPrediction.expiryBoxes.mapNotNull { box ->
+            // the boxes produced by textDetector are sometimes too tight, especially in the Y
+            // direction. Scale it out a bit
+            textDetectorPrediction.expiryBoxes.mapNotNull { box ->
                 expiryDetect?.analyze(
                     ExpiryDetect.Input(
                         objDetectBitmap,
@@ -83,14 +86,13 @@ class NameAndExpiryAnalyzer private constructor(
                     ),
                     Unit
                 )?.expiry
-            }.sortedByDescending { it.year * 100 + it.month }
-            parsedExpiries.firstOrNull()
+            }.maxBy { it.year * 100 + it.month }
         } else {
             null
         }
 
         val name = if (state.runNameExtraction) {
-            val words = textDetectorPrediction.nameBoxes.mapNotNull { box ->
+            textDetectorPrediction.nameBoxes.mapNotNull { box ->
                 // the boxes produced by textDetector are sometimes too tight, especially in the Y
                 // direction. Scale it out a bit
                 processNamePredictions(
@@ -100,8 +102,7 @@ class NameAndExpiryAnalyzer private constructor(
                     ),
                     objDetectBitmap
                 )?.filter { it != ' ' }
-            }
-            words.joinToString(" ").trim().ifEmpty { null }
+            }.joinToString(" ").trim().ifEmpty { null }
         } else {
             null
         }
@@ -109,11 +110,8 @@ class NameAndExpiryAnalyzer private constructor(
         Output(name, textDetectorPrediction.allObjects, expiry)
     }
 
-    internal class CharPredictionWithBox(
-        val characterPrediction: AlphabetDetect.Prediction,
-        val box: RectF
-    ) {
-        fun getNormalizedRectform(width: Int, height: Int) = rectForm(
+    private data class CharPredictionWithBox(val characterPrediction: AlphabetDetect.Prediction, val box: RectF) {
+        fun getNormalizedRectForm(width: Int, height: Int) = rectForm(
             left = box.left / width,
             top = box.top / height,
             right = box.right / width,
@@ -165,19 +163,19 @@ class NameAndExpiryAnalyzer private constructor(
         }
 
         val (boxes, probabilities) = predictions.map {
-            it.getNormalizedRectform(
+            it.getNormalizedRectForm(
                 width = bitmapForObjectDetection.width,
                 height = bitmapForObjectDetection.height
             ) to it.characterPrediction.confidence
         }.unzip()
 
-        val indices: List<Int> =
-            hardNonMaximumSuppression(
-                boxes.toTypedArray(),
-                probabilities.toFloatArray(),
-                NMS_THRESHOLD,
-                limit = 0
-            )
+        val indices: List<Int> = hardNonMaximumSuppression(
+            boxes.toTypedArray(),
+            probabilities.toFloatArray(),
+            NMS_THRESHOLD,
+            limit = 0
+        )
+
         return processNMSResults(predictions.filterIndexed { index, _ -> indices.contains(index) })
     }
 
@@ -192,16 +190,17 @@ class NameAndExpiryAnalyzer private constructor(
         var currentConsecutiveCount = 0
         var currentLetterMaxConfidence = 0f
         var lastSeenLetter = 0.toChar()
+
         charClusters.forEach { characterPrediction ->
             if (lastSeenLetter == characterPrediction.character) {
                 currentConsecutiveCount += 1
-                currentLetterMaxConfidence =
-                    Math.max(currentLetterMaxConfidence, characterPrediction.confidence)
+                currentLetterMaxConfidence = max(currentLetterMaxConfidence, characterPrediction.confidence)
             } else {
                 currentConsecutiveCount = 1
                 currentLetterMaxConfidence = characterPrediction.confidence
                 lastSeenLetter = characterPrediction.character
             }
+
             if (currentConsecutiveCount == candidateConsecutiveCount && currentLetterMaxConfidence > candidateLetterConfidence ||
                 currentConsecutiveCount > candidateConsecutiveCount
             ) {
@@ -210,9 +209,8 @@ class NameAndExpiryAnalyzer private constructor(
                 candidateConsecutiveCount = currentConsecutiveCount
             }
         }
-        return if (candidateLetterConfidence > CHAR_CONFIDENCE_THRESHOLD) {
-            candidateLetter
-        } else ' '
+
+        return if (candidateLetterConfidence > CHAR_CONFIDENCE_THRESHOLD) candidateLetter else ' '
     }
 
     /**
@@ -232,12 +230,11 @@ class NameAndExpiryAnalyzer private constructor(
         val p25 = slice[p25Index]
         val pmax = slice[slice.size - 1]
         val pmax2 = if (slice.size >= 2) slice[slice.size - 2] else pmax
-        return if (pmax == pmax2 && pmax == p25) {
-            pmax + 1
-        } else if ((pmax - pmax2) * 2 <= pmax2 - p25) {
-            pmax2
-        } else {
-            pmax
+
+        return when {
+            pmax == pmax2 && pmax == p25 -> pmax + 1
+            (pmax - pmax2) * 2 <= pmax2 - p25 -> pmax2
+            else -> pmax
         }
     }
 
@@ -294,6 +291,7 @@ class NameAndExpiryAnalyzer private constructor(
                 numConsecSpaces = 0
             }
         }
+
         return word.toString().trim { it <= ' ' }
     }
 
@@ -302,12 +300,10 @@ class NameAndExpiryAnalyzer private constructor(
         private val alphabetDetectFactory: AlphabetDetect.Factory? = null,
         private val expiryDetectFactory: ExpiryDetect.Factory? = null
     ) : AnalyzerFactory<NameAndExpiryAnalyzer> {
-        override suspend fun newInstance(): NameAndExpiryAnalyzer? {
-            return NameAndExpiryAnalyzer(
-                textDetectorFactory.newInstance(),
-                alphabetDetectFactory?.newInstance(),
-                expiryDetectFactory?.newInstance()
-            )
-        }
+        override suspend fun newInstance() = NameAndExpiryAnalyzer(
+            textDetectorFactory.newInstance(),
+            alphabetDetectFactory?.newInstance(),
+            expiryDetectFactory?.newInstance()
+        )
     }
 }

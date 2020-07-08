@@ -155,6 +155,7 @@ class CardScanActivity :
          * @param activity: The activity launching card scan.
          * @param apiKey: The bouncer API key used to run scanning.
          * @param enableEnterCardManually: If true, show a button to enter the card manually.
+         * @param enableExpiryExtraction: If true, attempt to extract the card expiry.
          * @param enableNameExtraction: If true, attempt to extract the cardholder name.
          * @param displayCardPan: If true, display the card pan once the card has started to scan.
          * @param displayCardholderName: If true, display the name of the card owner if extracted.
@@ -197,6 +198,7 @@ class CardScanActivity :
          * @param fragment: The fragment launching card scan.
          * @param apiKey: The bouncer API key used to run scanning.
          * @param enableEnterCardManually: If true, show a button to enter the card manually.
+         * @param enableExpiryExtraction: If true, attempt to extract the card expiry.
          * @param enableNameExtraction: If true, attempt to extract the cardholder name.
          * @param displayCardPan: If true, display the card pan once the card has started to scan.
          * @param displayCardholderName: If true, display the name of the card owner if extracted.
@@ -240,6 +242,7 @@ class CardScanActivity :
          * @param context: The activity used to build the intent.
          * @param apiKey: The bouncer API key used to run scanning.
          * @param enableEnterCardManually: If true, show a button to enter the card manually.
+         * @param enableExpiryExtraction: If true, attempt to extract the card expiry.
          * @param enableNameExtraction: If true, attempt to extract the cardholder name.
          * @param displayCardPan: If true, display the card pan once the card has started to scan.
          * @param displayCardholderName: If true, display the name of the card owner if extracted.
