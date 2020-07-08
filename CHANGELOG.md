@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.0.0013](https://github.com/getbouncer/cardscan-ui-android/tree/2.0.0013) (2020-07-08)
+
+[Full Changelog](https://github.com/getbouncer/cardscan-ui-android/compare/2.0.0012...2.0.0013)
+
+**Merged pull requests:**
+
+- Shut down analyzer context on quit [\#38](https://github.com/getbouncer/cardscan-ui-android/pull/38) ([awushensky](https://github.com/awushensky))
+- Separate loop logic [\#37](https://github.com/getbouncer/cardscan-ui-android/pull/37) ([awushensky](https://github.com/awushensky))
+- Bump ktlint from 0.37.0 to 0.37.2 [\#35](https://github.com/getbouncer/cardscan-ui-android/pull/35) ([dependabot-preview[bot]](https://github.com/apps/dependabot-preview))
+- Update ui [\#34](https://github.com/getbouncer/cardscan-ui-android/pull/34) ([awushensky](https://github.com/awushensky))
+- Warmup name and expiry [\#33](https://github.com/getbouncer/cardscan-ui-android/pull/33) ([xsl](https://github.com/xsl))
+- Expiry extraction + new text detector [\#32](https://github.com/getbouncer/cardscan-ui-android/pull/32) ([xsl](https://github.com/xsl))
+
 ## [2.0.0012](https://github.com/getbouncer/cardscan-ui-android/tree/2.0.0012) (2020-06-15)
 
 [Full Changelog](https://github.com/getbouncer/cardscan-ui-android/compare/2.0.0011...2.0.0012)
@@ -59,7 +72,6 @@
 
 **Merged pull requests:**
 
-- Update submodules [\#4](https://github.com/getbouncer/cardscan-ui-android/pull/4) ([awushensky](https://github.com/awushensky))
 - Set api key on warmup [\#3](https://github.com/getbouncer/cardscan-ui-android/pull/3) ([awushensky](https://github.com/awushensky))
 
 ## [2.0.0005](https://github.com/getbouncer/cardscan-ui-android/tree/2.0.0005) (2020-05-08)
@@ -68,6 +80,7 @@
 
 **Merged pull requests:**
 
+- Update submodules [\#4](https://github.com/getbouncer/cardscan-ui-android/pull/4) ([awushensky](https://github.com/awushensky))
 - Update submodules [\#2](https://github.com/getbouncer/cardscan-ui-android/pull/2) ([awushensky](https://github.com/awushensky))
 - Update documentation [\#1](https://github.com/getbouncer/cardscan-ui-android/pull/1) ([awushensky](https://github.com/awushensky))
 
