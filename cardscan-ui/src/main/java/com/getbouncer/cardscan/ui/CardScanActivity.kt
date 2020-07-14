@@ -31,7 +31,7 @@ import com.getbouncer.scan.payment.card.formatPan
 import com.getbouncer.scan.payment.card.getCardIssuer
 import com.getbouncer.scan.payment.card.isPossiblyValidPan
 import com.getbouncer.scan.payment.ml.SSDOcr
-import com.getbouncer.scan.payment.ml.calculateCardFinderCoordinatesFromObjectDetection
+import com.getbouncer.scan.payment.ml.common.calculateCardFinderCoordinatesFromObjectDetection
 import com.getbouncer.scan.payment.ml.ssd.DetectionBox
 import com.getbouncer.scan.ui.DebugDetectionBox
 import com.getbouncer.scan.ui.ScanActivity
