@@ -473,6 +473,7 @@ class CardScanActivity :
             viewFinderWindow.setBackgroundResource(R.drawable.bouncer_card_background_not_found)
             setAnimated(viewFinderBorder, R.drawable.bouncer_card_border_not_found)
             cardPanTextView.setVisible(false)
+            cardNameTextView.setVisible(false)
             instructionsTextView.setText(R.string.bouncer_card_scan_instructions)
         }
         hasPreviousValidResult.set(false)
