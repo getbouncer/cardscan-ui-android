@@ -50,9 +50,22 @@ class CardScanFlow(
         var attemptedNameAndExpiryInitialization = false
             private set
 
+        private val getTextDetectorModel = cacheFirstResultSuspend { context: Context, forImmediateUse: Boolean ->
+            TextDetector.ModelFetcher(context).fetchData(forImmediateUse)
+        }
+        private val getAlphabetDetectorModel = cacheFirstResultSuspend { context: Context, forImmediateUse: Boolean ->
+            AlphabetDetect.ModelFetcher(context).fetchData(forImmediateUse)
+        }
+        private val getExpiryDetectorModel = cacheFirstResultSuspend { context: Context, forImmediateUse: Boolean ->
+            ExpiryDetect.ModelFetcher(context).fetchData(forImmediateUse)
+        }
+        private val getSsdOcrModel = cacheFirstResultSuspend { context: Context, forImmediateUse: Boolean ->
+            SSDOcr.ModelFetcher(context).fetchData(forImmediateUse)
+        }
+
         /**
-         * Warm up the analyzers for card scanner. This method is optional, but will increase the
-         * speed at which the scan occurs.
+         * Warm up the analyzers for card scanner. This method is optional, but will increase the speed at which the
+         * scan occurs.
          *
          * @param context: A context to use for warming up the analyzers.
          */
@@ -60,26 +73,16 @@ class CardScanFlow(
         fun warmUp(context: Context, apiKey: String, initializeNameAndExpiryExtraction: Boolean) {
             Config.apiKey = apiKey
 
+            // pre-fetch all of the models used by this flow.
             GlobalScope.launch(Dispatchers.Default) {
-                getAnalyzerPool(context, initializeNameAndExpiryExtraction)
+                if (initializeNameAndExpiryExtraction) {
+                    attemptedNameAndExpiryInitialization = true
+                    getTextDetectorModel(context, false)
+                    getAlphabetDetectorModel(context, false)
+                    getExpiryDetectorModel(context, false)
+                }
+                getSsdOcrModel(context, false)
             }
-        }
-
-        private val getAnalyzerPool = cacheFirstResultSuspend { context: Context, enableNameOrExpiryExtraction: Boolean ->
-            val nameDetect = if (enableNameOrExpiryExtraction) {
-                attemptedNameAndExpiryInitialization = true
-                NameAndExpiryAnalyzer.Factory(
-                    TextDetector.Factory(context, TextDetector.ModelLoader(context)),
-                    AlphabetDetect.Factory(context, AlphabetDetect.ModelLoader(context)),
-                    ExpiryDetect.Factory(context, ExpiryDetect.ModelLoader(context))
-                )
-            } else {
-                null
-            }
-
-            AnalyzerPoolFactory(
-                PaymentCardOcrAnalyzer.Factory(SSDOcr.Factory(context, SSDOcr.ModelLoader(context)), nameDetect)
-            ).buildAnalyzerPool()
         }
     }
 
@@ -128,11 +131,27 @@ class CardScanFlow(
             )
         )
 
+        val analyzerPool = runBlocking {
+            val nameDetect = if (attemptedNameAndExpiryInitialization) {
+                NameAndExpiryAnalyzer.Factory(
+                    TextDetector.Factory(context, getTextDetectorModel(context, true)),
+                    AlphabetDetect.Factory(context, getAlphabetDetectorModel(context, true)),
+                    ExpiryDetect.Factory(context, getExpiryDetectorModel(context, true))
+                )
+            } else {
+                null
+            }
+
+            AnalyzerPoolFactory(
+                PaymentCardOcrAnalyzer.Factory(SSDOcr.Factory(context, getSsdOcrModel(context, true)), nameDetect)
+            ).buildAnalyzerPool()
+        }
+
         // make this result aggregator pause and reset when the lifecycle pauses.
         mainLoopResultAggregator.bindToLifecycle(lifecycleOwner)
 
         val mainLoop = ProcessBoundAnalyzerLoop(
-            analyzerPool = runBlocking { getAnalyzerPool(context, attemptedNameAndExpiryInitialization) },
+            analyzerPool = analyzerPool,
             resultHandler = mainLoopResultAggregator,
             name = "main_loop",
             analyzerLoopErrorListener = errorListener
