@@ -1,6 +1,0 @@
-[submodule "scan-payment-android"]
-	path = scan-payment-android
-	url = https://github.com/getbouncer/scan-payment-android
-[submodule "scan-ui-android"]
-	path = scan-ui-android
-	url = https://github.com/getbouncer/scan-ui-android

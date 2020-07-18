@@ -1,6 +1,0 @@
-include ':cardscan-ui', ':scan-ui', ':scan-camera', ':scan-framework', ':scan-payment'
-rootProject.name='cardscan-ui-android'
-project(':scan-ui').projectDir = new File('scan-ui-android/scan-ui')
-project(':scan-camera').projectDir = new File('scan-ui-android/scan-camera-android/scan-camera')
-project(':scan-framework').projectDir = new File('scan-ui-android/scan-framework-android/scan-framework')
-project(':scan-payment').projectDir = new File('scan-payment-android/scan-payment')
